@@ -32,7 +32,7 @@ export const PROVIDERS: Record<Provider, ProviderConfig> = {
   },
 };
 
-export interface Summaries {
+export interface PlatformSummaries {
   twitter: string;
   thread: string;
   linkedin: string;
@@ -40,7 +40,7 @@ export interface Summaries {
 }
 
 export interface SummarizeResult {
-  summaries: Summaries;
+  summaries: PlatformSummaries;
   error?: never;
 }
 
@@ -51,14 +51,14 @@ export interface SummarizeError {
 
 export type SummarizeResponse = SummarizeResult | SummarizeError;
 
-export const PLATFORM_LIMITS = {
+export const PLATFORM_LIMITS: Record<keyof PlatformSummaries, number> = {
   twitter: 250,
   thread: 500,
   linkedin: 800,
   geekNews: 1000,
 } as const;
 
-export const PLATFORM_LABELS: Record<keyof Summaries, string> = {
+export const PLATFORM_LABELS: Record<keyof PlatformSummaries, string> = {
   twitter: '🐦 Twitter',
   thread: '🧵 Thread',
   linkedin: '💼 LinkedIn',
