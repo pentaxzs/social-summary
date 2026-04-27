@@ -1,0 +1,82 @@
+<h2>요약 결과를 어떻게 보여줄까요?</h2>
+<p class="subtitle">URL을 입력하면 4개 플랫폼 요약이 표시되는 방식을 선택해주세요</p>
+
+<div class="cards">
+  <div class="card" data-choice="tabs" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup" style="font-size:12px;padding:8px;">
+        <div style="display:flex;gap:4px;border-bottom:2px solid #ddd;margin-bottom:8px;">
+          <div style="padding:4px 10px;background:#6366f1;color:#fff;border-radius:4px 4px 0 0;font-size:11px;">Twitter</div>
+          <div style="padding:4px 10px;background:#f3f4f6;border-radius:4px 4px 0 0;font-size:11px;color:#888;">LinkedIn</div>
+          <div style="padding:4px 10px;background:#f3f4f6;border-radius:4px 4px 0 0;font-size:11px;color:#888;">Thread</div>
+          <div style="padding:4px 10px;background:#f3f4f6;border-radius:4px 4px 0 0;font-size:11px;color:#888;">Geek</div>
+        </div>
+        <div style="background:#f9fafb;padding:8px;border-radius:4px;font-size:10px;color:#555;min-height:50px;">
+          트위터용 요약이 여기에 표시됩니다. 최대 250자...
+        </div>
+        <div style="margin-top:6px;font-size:10px;color:#6366f1;">📋 복사</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — 탭 방식</h3>
+      <p>탭을 클릭해 플랫폼별 요약 전환. 집중해서 한 번에 하나씩 확인</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="cards" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup" style="font-size:12px;padding:8px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+          <div style="background:#f9fafb;padding:6px;border-radius:4px;">
+            <div style="font-size:10px;font-weight:700;color:#1d9bf0;margin-bottom:3px;">🐦 Twitter</div>
+            <div style="font-size:9px;color:#555;">250자 요약...</div>
+          </div>
+          <div style="background:#f9fafb;padding:6px;border-radius:4px;">
+            <div style="font-size:10px;font-weight:700;color:#0a66c2;margin-bottom:3px;">💼 LinkedIn</div>
+            <div style="font-size:9px;color:#555;">800자 요약...</div>
+          </div>
+          <div style="background:#f9fafb;padding:6px;border-radius:4px;">
+            <div style="font-size:10px;font-weight:700;color:#000;margin-bottom:3px;">🧵 Thread</div>
+            <div style="font-size:9px;color:#555;">500자 요약...</div>
+          </div>
+          <div style="background:#f9fafb;padding:6px;border-radius:4px;">
+            <div style="font-size:10px;font-weight:700;color:#e84393;margin-bottom:3px;">🤓 Geek News</div>
+            <div style="font-size:9px;color:#555;">1000자 요약...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — 카드 그리드 방식</h3>
+      <p>4개 요약이 동시에 보임. 한눈에 비교하며 복사 가능</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="vertical" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup" style="font-size:12px;padding:8px;">
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div style="background:#f9fafb;padding:5px 8px;border-radius:4px;display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <div style="font-size:10px;font-weight:700;color:#1d9bf0;">🐦 Twitter · 250자</div>
+              <div style="font-size:9px;color:#555;margin-top:2px;">트위터 요약 텍스트...</div>
+            </div>
+            <div style="font-size:9px;color:#6366f1;">복사</div>
+          </div>
+          <div style="background:#f9fafb;padding:5px 8px;border-radius:4px;display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <div style="font-size:10px;font-weight:700;color:#0a66c2;">💼 LinkedIn · 800자</div>
+              <div style="font-size:9px;color:#555;margin-top:2px;">링크드인 요약 텍스트...</div>
+            </div>
+            <div style="font-size:9px;color:#6366f1;">복사</div>
+          </div>
+        </div>
+        <div style="font-size:9px;color:#aaa;text-align:center;margin-top:3px;">↓ Thread, Geek News...</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — 세로 리스트 방식</h3>
+      <p>4개를 위아래로 나열. 각 요약 옆에 바로 복사 버튼</p>
+    </div>
+  </div>
+</div>
