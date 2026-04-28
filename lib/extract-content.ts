@@ -1,5 +1,4 @@
-import { Readability } from '@mozilla/readability';
-import { JSDOM } from 'jsdom';
+import * as cheerio from 'cheerio';
 
 export interface ExtractResult {
   title: string;
@@ -19,12 +18,7 @@ function validateUrl(url: string): void {
   }
 
   const hostname = parsed.hostname.toLowerCase();
-  const blocked = [
-    'localhost',
-    '127.0.0.1',
-    '0.0.0.0',
-    '::1',
-  ];
+  const blocked = ['localhost', '127.0.0.1', '0.0.0.0', '::1'];
   if (
     blocked.includes(hostname) ||
     /^10\./.test(hostname) ||
@@ -38,6 +32,7 @@ function validateUrl(url: string): void {
 
 export async function extractContent(url: string): Promise<ExtractResult> {
   validateUrl(url);
+
   const response = await fetch(url, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (compatible; SocialSummaryBot/1.0)',
@@ -50,18 +45,51 @@ export async function extractContent(url: string): Promise<ExtractResult> {
   }
 
   const html = await response.text();
-  const dom = new JSDOM(html, { url });
-  const reader = new Readability(dom.window.document);
-  const article = reader.parse();
+  const $ = cheerio.load(html);
 
-  if (!article || !article.textContent?.trim()) {
+  const title =
+    $('meta[property="og:title"]').attr('content') ||
+    $('title').text() ||
+    $('h1').first().text() ||
+    '';
+
+  // 불필요한 요소 제거
+  $('script, style, nav, header, footer, aside, iframe, noscript').remove();
+  $('[class*="nav"], [class*="menu"], [class*="sidebar"], [class*="ad"], [id*="nav"], [id*="sidebar"]').remove();
+
+  // 본문 추출 (article > main > body 순으로 시도)
+  const mainSelectors = [
+    'article',
+    'main',
+    '[role="main"]',
+    '.post-content',
+    '.article-content',
+    '.entry-content',
+    '.content',
+    '#content',
+    '#main',
+  ];
+
+  let contentEl = $();
+  for (const sel of mainSelectors) {
+    const el = $(sel).first();
+    if (el.length && el.text().trim().length > 200) {
+      contentEl = el;
+      break;
+    }
+  }
+
+  const rawText = (contentEl.length ? contentEl : $('body'))
+    .text()
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 8000);
+
+  if (!rawText) {
     throw new Error(
       '페이지에서 읽을 수 있는 내용을 찾지 못했습니다. JS 렌더링이 필요한 페이지일 수 있습니다.'
     );
   }
 
-  return {
-    title: article.title ?? '',
-    content: article.textContent.trim().slice(0, 8000),
-  };
+  return { title: title.trim(), content: rawText };
 }

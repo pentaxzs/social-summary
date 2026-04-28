@@ -1,7 +1,7 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ['@mozilla/readability', 'jsdom'],
+  serverExternalPackages: ['cheerio'],
 };
 
 export default nextConfig;
