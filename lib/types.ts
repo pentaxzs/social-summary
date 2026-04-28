@@ -21,7 +21,7 @@ export const PROVIDERS: Record<Provider, ProviderConfig> = {
     keyPlaceholder: 'AIza...',
     keyHelpUrl: 'https://aistudio.google.com/app/apikey',
     keyHelpLabel: 'aistudio.google.com',
-    defaultModel: 'gemini-1.5-flash',
+    defaultModel: 'gemini-1.5-flash-latest',
   },
   openai: {
     label: 'ChatGPT (OpenAI)',
