@@ -94,8 +94,19 @@ export async function summarizeUrl(
     summaries.geekNews = `${summaries.geekNews}\n\n👉 ${url}`;
 
     return { summaries };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.';
+  } catch (err: unknown) {
+    let message = '알 수 없는 오류가 발생했습니다.';
+    if (err instanceof Error) {
+      message = err.message;
+    } else if (typeof err === 'string') {
+      message = err;
+    } else {
+      try {
+        message = JSON.stringify(err);
+      } catch {
+        message = '알 수 없는 오류가 발생했습니다.';
+      }
+    }
     return { error: message };
   }
 }
