@@ -14,14 +14,14 @@ export const PROVIDERS: Record<Provider, ProviderConfig> = {
     keyPlaceholder: 'sk-ant-...',
     keyHelpUrl: 'https://console.anthropic.com',
     keyHelpLabel: 'console.anthropic.com',
-    defaultModel: 'claude-3-5-haiku-20241022',
+    defaultModel: 'claude-haiku-4-5-20251001',
   },
   google: {
     label: 'Gemini (Google)',
     keyPlaceholder: 'AIza...',
     keyHelpUrl: 'https://aistudio.google.com/app/apikey',
     keyHelpLabel: 'aistudio.google.com',
-    defaultModel: 'gemini-2.0-flash',
+    defaultModel: 'gemini-1.5-flash',
   },
   openai: {
     label: 'ChatGPT (OpenAI)',

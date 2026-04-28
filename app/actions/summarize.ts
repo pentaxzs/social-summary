@@ -33,10 +33,10 @@ const SUMMARY_PROMPT = (title: string, content: string) => `
 ${content}
 
 각 플랫폼 요약 요건:
-- twitter: 최대 ${PLATFORM_LIMITS.twitter}자. 핵심만 담은 간결하고 임팩트 있는 문장.
-- thread: 최대 ${PLATFORM_LIMITS.thread}자. 조금 더 상세하게, 대화체로.
-- linkedin: 최대 ${PLATFORM_LIMITS.linkedin}자. 전문적인 톤, 인사이트 강조.
-- geekNews: 최대 ${PLATFORM_LIMITS.geekNews}자. IT 커뮤니티 대상, 기술적 관점 강조, 핵심 기술/수치 포함.
+- twitter: 200자 이상 ${PLATFORM_LIMITS.twitter}자 이하. 핵심만 담은 간결하고 임팩트 있는 문장.
+- thread: 400자 이상 ${PLATFORM_LIMITS.thread}자 이하. 조금 더 상세하게, 대화체로.
+- linkedin: 700자 이상 ${PLATFORM_LIMITS.linkedin}자 이하. 전문적인 톤, 인사이트 강조. 주요 내용은 반드시 bullet(•) 형식으로 표현.
+- geekNews: 800자 이상 ${PLATFORM_LIMITS.geekNews}자 이하. IT 커뮤니티 대상, 기술적 관점 강조, 핵심 기술/수치 포함. 주요 내용은 반드시 bullet(•) 형식으로 표현.
 
 반드시 아래 JSON 형식으로만 응답해 (다른 텍스트 없이):
 {
@@ -82,6 +82,16 @@ export async function summarizeUrl(
         summaries[key] = summaries[key].slice(0, PLATFORM_LIMITS[key]);
       }
     }
+
+    // 원문 링크 추가 (LinkedIn은 utm_source 파라미터 포함)
+    const linkedinUrl = url.includes('?')
+      ? `${url}&utm_source=linkedin`
+      : `${url}?utm_source=linkedin`;
+
+    summaries.twitter = `${summaries.twitter}\n\n👉 ${url}`;
+    summaries.thread = `${summaries.thread}\n\n👉 ${url}`;
+    summaries.linkedin = `${summaries.linkedin}\n\n👉 ${linkedinUrl}`;
+    summaries.geekNews = `${summaries.geekNews}\n\n👉 ${url}`;
 
     return { summaries };
   } catch (err) {

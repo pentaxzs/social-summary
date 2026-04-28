@@ -19,7 +19,6 @@ export default function Home() {
   const [history, setHistory] = useState<string[]>([]);
   const [isPending, startTransition] = useTransition();
 
-  // localStorage 불러오기
   useEffect(() => {
     const savedProvider = localStorage.getItem(LS_PROVIDER) as Provider | null;
     const savedKey = localStorage.getItem(LS_API_KEY);
@@ -56,7 +55,6 @@ export default function Home() {
 
       setSummaries(result.summaries ?? null);
 
-      // 히스토리 저장 (최근 10개)
       const next = [url, ...history.filter((h) => h !== url)].slice(0, 10);
       setHistory(next);
       localStorage.setItem(LS_HISTORY, JSON.stringify(next));
@@ -66,75 +64,94 @@ export default function Home() {
   const canSubmit = !!apiKey && !!url && !isPending;
 
   return (
-    <main className="max-w-2xl mx-auto px-4 py-10 space-y-6">
-      <div className="text-center space-y-1">
-        <h1 className="text-3xl font-bold text-gray-900">Social Summary</h1>
-        <p className="text-gray-500 text-sm">URL을 입력하면 SNS 플랫폼별 요약문을 생성해드립니다</p>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50">
+      <main className="max-w-2xl mx-auto px-4 sm:px-6 py-10 sm:py-14 space-y-6">
 
-      <ApiKeyInput
-        provider={provider}
-        apiKey={apiKey}
-        onProviderChange={handleProviderChange}
-        onApiKeyChange={handleApiKeyChange}
-      />
-
-      <form onSubmit={handleSubmit} className="space-y-3">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">🌐 URL</label>
-          <input
-            type="url"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://example.com/article"
-            required
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
+        {/* 헤더 */}
+        <div className="text-center space-y-2">
+          <h1 className="text-4xl sm:text-5xl font-extrabold text-gray-900 tracking-tight">
+            📣 Social Summary
+          </h1>
+          <p className="text-gray-500 text-sm sm:text-base">
+            URL을 입력하면 SNS 플랫폼별 요약문을 자동으로 생성해드립니다
+          </p>
         </div>
 
-        {history.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {history.slice(0, 5).map((h) => (
-              <button
-                key={h}
-                type="button"
-                onClick={() => setUrl(h)}
-                className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 truncate max-w-[200px]"
-              >
-                {h}
-              </button>
-            ))}
+        {/* AI 설정 */}
+        <ApiKeyInput
+          provider={provider}
+          apiKey={apiKey}
+          onProviderChange={handleProviderChange}
+          onApiKeyChange={handleApiKeyChange}
+        />
+
+        {/* URL 입력 폼 */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 sm:p-5 space-y-4">
+          <label className="block text-base sm:text-lg font-semibold text-gray-800">
+            🌐 URL
+          </label>
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <input
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://example.com/article"
+              required
+              className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+            />
+
+            {history.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {history.slice(0, 5).map((h) => (
+                  <button
+                    key={h}
+                    type="button"
+                    onClick={() => setUrl(h)}
+                    className="text-xs px-3 py-1.5 rounded-full bg-gray-100 text-gray-600 hover:bg-indigo-50 hover:text-indigo-600 truncate max-w-[200px] transition-colors"
+                  >
+                    {h}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={!canSubmit}
+              className="w-full py-3 sm:py-3.5 rounded-xl bg-indigo-600 text-white font-semibold text-sm sm:text-base hover:bg-indigo-700 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            >
+              {isPending ? '✨ 요약 생성 중...' : '요약 생성하기'}
+            </button>
+          </form>
+        </div>
+
+        {/* 로딩 */}
+        {isPending && (
+          <div className="text-center py-10 space-y-3">
+            <div className="text-3xl animate-bounce">✨</div>
+            <p className="text-gray-500 text-sm sm:text-base animate-pulse">
+              페이지를 읽고 요약 중입니다...
+            </p>
           </div>
         )}
 
-        <button
-          type="submit"
-          disabled={!canSubmit}
-          className="w-full py-2.5 rounded-lg bg-indigo-600 text-white font-medium text-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {isPending ? '요약 생성 중...' : '요약 생성'}
-        </button>
-      </form>
+        {/* 에러 */}
+        {error && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-4 text-sm sm:text-base text-red-700 flex gap-2">
+            <span>⚠️</span>
+            <span>{error}</span>
+          </div>
+        )}
 
-      {isPending && (
-        <div className="text-center py-8 text-gray-500 text-sm animate-pulse">
-          페이지를 읽고 요약 중입니다...
-        </div>
-      )}
-
-      {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
-
-      {summaries && (
-        <div className="space-y-4">
-          {(['twitter', 'thread', 'linkedin', 'geekNews'] as const).map((platform) => (
-            <SummaryCard key={platform} platform={platform} text={summaries[platform]} />
-          ))}
-        </div>
-      )}
-    </main>
+        {/* 요약 결과 */}
+        {summaries && (
+          <div className="space-y-4">
+            {(['twitter', 'thread', 'linkedin', 'geekNews'] as const).map((platform) => (
+              <SummaryCard key={platform} platform={platform} text={summaries[platform]} />
+            ))}
+          </div>
+        )}
+      </main>
+    </div>
   );
 }
