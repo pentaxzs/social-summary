@@ -68,6 +68,13 @@ export async function summarizeUrl(
 
     const summaries = JSON.parse(jsonMatch[0]) as PlatformSummaries;
 
+    const requiredKeys: Array<keyof PlatformSummaries> = ['twitter', 'thread', 'linkedin', 'geekNews'];
+    for (const key of requiredKeys) {
+      if (typeof summaries[key] !== 'string') {
+        throw new Error('AI가 올바른 형식으로 응답하지 않았습니다. 다시 시도해주세요.');
+      }
+    }
+
     // 글자 수 초과 시 잘라내기 (안전장치)
     const keys = Object.keys(PLATFORM_LIMITS) as Array<keyof typeof PLATFORM_LIMITS>;
     for (const key of keys) {
