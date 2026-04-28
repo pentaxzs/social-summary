@@ -69,7 +69,7 @@ export default function Home() {
 
         {/* 헤더 */}
         <div className="text-center space-y-2">
-          <h1 className="text-4xl sm:text-5xl font-extrabold text-gray-900 tracking-tight">
+          <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 tracking-tight">
             📣 Social Summary
           </h1>
           <p className="text-gray-500 text-sm sm:text-base">
@@ -97,7 +97,7 @@ export default function Home() {
               onChange={(e) => setUrl(e.target.value)}
               placeholder="https://example.com/article"
               required
-              className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+              className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm sm:text-base text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
             />
 
             {history.length > 0 && (

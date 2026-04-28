@@ -28,7 +28,7 @@ export function ApiKeyInput({
         <select
           value={provider}
           onChange={(e) => onProviderChange(e.target.value as Provider)}
-          className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white transition"
+          className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm sm:text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white transition"
         >
           {(Object.keys(PROVIDERS) as Provider[]).map((p) => (
             <option key={p} value={p}>
@@ -48,7 +48,7 @@ export function ApiKeyInput({
             value={apiKey}
             onChange={(e) => onApiKeyChange(e.target.value)}
             placeholder={config.keyPlaceholder}
-            className="w-full rounded-xl border border-gray-300 px-4 py-3 pr-12 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+            className="w-full rounded-xl border border-gray-300 px-4 py-3 pr-12 text-sm sm:text-base text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
           />
           <button
             type="button"
