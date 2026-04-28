@@ -73,7 +73,7 @@ export default function Home() {
             📣 Social Summary
           </h1>
           <p className="text-gray-500 text-sm sm:text-base">
-            URL을 입력하면 SNS 플랫폼별 요약문을 자동으로 생성해드립니다
+            URL을 입력하면 SNS 요약문을 자동으로 생성해요.
           </p>
         </div>
 
