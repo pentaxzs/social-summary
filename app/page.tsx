@@ -46,18 +46,26 @@ export default function Home() {
     setSummaries(null);
 
     startTransition(async () => {
-      const result = await summarizeUrl(url, provider, apiKey);
+      try {
+        const result = await summarizeUrl(url, provider, apiKey);
 
-      if (result.error) {
-        setError(result.error);
-        return;
+        if (result.error) {
+          setError(result.error);
+          return;
+        }
+
+        setSummaries(result.summaries ?? null);
+
+        const next = [url, ...history.filter((h) => h !== url)].slice(0, 10);
+        setHistory(next);
+        localStorage.setItem(LS_HISTORY, JSON.stringify(next));
+      } catch (e) {
+        setError(
+          e instanceof Error
+            ? e.message
+            : '요약 생성 중 오류가 발생했습니다. 다시 시도해주세요.'
+        );
       }
-
-      setSummaries(result.summaries ?? null);
-
-      const next = [url, ...history.filter((h) => h !== url)].slice(0, 10);
-      setHistory(next);
-      localStorage.setItem(LS_HISTORY, JSON.stringify(next));
     });
   }
 
