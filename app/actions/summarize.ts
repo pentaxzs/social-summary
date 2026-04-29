@@ -25,7 +25,7 @@ function createModel(provider: Provider, apiKey: string) {
 }
 
 const SUMMARY_PROMPT = (title: string, content: string) => `
-다음 글을 4개 플랫폼에 맞게 요약해줘. 각 요약은 한국어로 작성하고 글자 수 제한을 반드시 지켜야 해.
+다음 글을 4개 플랫폼에 맞게 요약해줘. 각 요약은 한국어로 작성하고 글자 수 제한을 반드시 지켜야 해. 한국어 맞춤법에 맞게 띄어쓰기를 정확히 지켜줘.
 
 제목: ${title}
 
