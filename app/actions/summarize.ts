@@ -43,6 +43,8 @@ ${content}
   (링크는 포함하지 마. 자동으로 추가됨)
 - geekNews: 800자 이상 ${PLATFORM_LIMITS.geekNews}자 이하. IT 커뮤니티 대상, 기술적 관점 강조, 핵심 기술/수치 포함. 주요 내용은 반드시 bullet(•) 형식으로 표현.
 
+**, __, ## 같은 마크다운 문법은 절대 사용하지 마. 줄바꿈이 필요하면 실제 줄바꿈을 사용해.
+
 반드시 아래 JSON 형식으로만 응답해 (다른 텍스트 없이):
 {
   "twitter": "...",
@@ -78,6 +80,13 @@ export async function summarizeUrl(
       if (typeof summaries[key] !== 'string') {
         throw new Error('AI가 올바른 형식으로 응답하지 않았습니다. 다시 시도해주세요.');
       }
+      // 마크다운 제거 + 줄바꿈 정규화
+      summaries[key] = summaries[key]
+        .replace(/\*\*(.*?)\*\*/gs, '$1')  // **bold** → 텍스트만
+        .replace(/__(.*?)__/gs, '$1')       // __bold__ → 텍스트만
+        .replace(/^#{1,6}\s+/gm, '')        // ## 헤딩 제거
+        .replace(/\\n/g, '\n')              // 리터럴 \n → 실제 줄바꿈
+        .trim();
     }
 
     // 글자 수 초과 시 잘라내기 (안전장치)
