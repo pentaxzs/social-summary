@@ -82,10 +82,10 @@ export async function summarizeUrl(
       }
       // 마크다운 제거 + 줄바꿈 정규화
       summaries[key] = summaries[key]
-        .replace(/\*\*(.*?)\*\*/gs, '$1')  // **bold** → 텍스트만
-        .replace(/__(.*?)__/gs, '$1')       // __bold__ → 텍스트만
-        .replace(/^#{1,6}\s+/gm, '')        // ## 헤딩 제거
-        .replace(/\\n/g, '\n')              // 리터럴 \n → 실제 줄바꿈
+        .replace(/\*\*([\s\S]*?)\*\*/g, '$1')  // **bold** → 텍스트만
+        .replace(/__([\s\S]*?)__/g, '$1')       // __bold__ → 텍스트만
+        .replace(/^#{1,6}\s+/gm, '')            // ## 헤딩 제거
+        .replace(/\\n/g, '\n')                  // 리터럴 \n → 실제 줄바꿈
         .trim();
     }
 
