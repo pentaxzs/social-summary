@@ -35,7 +35,12 @@ ${content}
 각 플랫폼 요약 요건:
 - twitter: 200자 이상 ${PLATFORM_LIMITS.twitter}자 이하. 핵심만 담은 간결하고 임팩트 있는 문장.
 - thread: 400자 이상 ${PLATFORM_LIMITS.thread}자 이하. 조금 더 상세하게, 대화체로.
-- linkedin: 700자 이상 ${PLATFORM_LIMITS.linkedin}자 이하. 전문적인 톤, 인사이트 강조. 주요 내용은 반드시 bullet(•) 형식으로 표현.
+- linkedin: 700자 이상 ${PLATFORM_LIMITS.linkedin}자 이하. 전문적인 톤. 반드시 아래 구조를 지켜줘:
+  1) 서론: 문제 제기 또는 공감 유도 (1~2문장)
+  2) 본론: 핵심 메시지와 인사이트 (2~3문장)
+  3) 불릿: ✔ 형식으로 핵심 포인트 3개 내외 (각 포인트는 굵은 키워드 + 설명)
+  4) 마무리: 독자 행동 유도 또는 인사이트 정리 (1~2문장)
+  (링크는 포함하지 마. 자동으로 추가됨)
 - geekNews: 800자 이상 ${PLATFORM_LIMITS.geekNews}자 이하. IT 커뮤니티 대상, 기술적 관점 강조, 핵심 기술/수치 포함. 주요 내용은 반드시 bullet(•) 형식으로 표현.
 
 반드시 아래 JSON 형식으로만 응답해 (다른 텍스트 없이):
