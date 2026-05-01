@@ -55,7 +55,7 @@ export const PLATFORM_LIMITS: Record<keyof PlatformSummaries, number> = {
   twitter: 250,
   thread: 500,
   linkedin: 800,
-  geekNews: 1000,
+  geekNews: 1200,
 } as const;
 
 export const PLATFORM_LABELS: Record<keyof PlatformSummaries, string> = {

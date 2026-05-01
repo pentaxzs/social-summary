@@ -13,6 +13,18 @@ import {
   PLATFORM_LIMITS,
 } from '@/lib/types';
 
+function truncateAtSentence(text: string, limit: number): string {
+  if (text.length <= limit) return text;
+  const slice = text.slice(0, limit);
+  // 마지막 문장 끝(. ! ?) 위치 탐색
+  for (let i = slice.length - 1; i >= Math.floor(limit * 0.6); i--) {
+    if (slice[i] === '.' || slice[i] === '!' || slice[i] === '?') {
+      return slice.slice(0, i + 1).trim();
+    }
+  }
+  return slice.trim();
+}
+
 function createModel(provider: Provider, apiKey: string) {
   switch (provider) {
     case 'anthropic':
@@ -41,7 +53,7 @@ ${content}
   3) 불릿: ✔ 형식으로 핵심 포인트 3개 내외 (각 포인트는 굵은 키워드 + 설명)
   4) 마무리: 독자 행동 유도 또는 인사이트 정리 (1~2문장)
   (링크는 포함하지 마. 자동으로 추가됨)
-- geekNews: 800자 이상 ${PLATFORM_LIMITS.geekNews}자 이하. IT 커뮤니티 대상, 기술적 관점 강조, 핵심 기술/수치 포함. 주요 내용은 반드시 bullet(•) 형식으로 표현.
+- geekNews: 1000자 이상 ${PLATFORM_LIMITS.geekNews}자 이하. IT 커뮤니티 대상, 기술적 관점 강조, 핵심 기술/수치 포함. 주요 내용은 반드시 bullet(•) 형식으로 표현.
 
 **, __, ## 같은 마크다운 문법은 절대 사용하지 마. 줄바꿈이 필요하면 실제 줄바꿈을 사용해.
 
@@ -89,11 +101,11 @@ export async function summarizeUrl(
         .trim();
     }
 
-    // 글자 수 초과 시 잘라내기 (안전장치)
+    // 글자 수 초과 시 문장 단위로 잘라내기
     const keys = Object.keys(PLATFORM_LIMITS) as Array<keyof typeof PLATFORM_LIMITS>;
     for (const key of keys) {
       if (summaries[key].length > PLATFORM_LIMITS[key]) {
-        summaries[key] = summaries[key].slice(0, PLATFORM_LIMITS[key]);
+        summaries[key] = truncateAtSentence(summaries[key], PLATFORM_LIMITS[key]);
       }
     }
 
