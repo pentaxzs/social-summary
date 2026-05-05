@@ -3,18 +3,46 @@
 import { useState, useEffect, useTransition } from 'react';
 import { ApiKeyInput } from '@/components/ApiKeyInput';
 import { SummaryCard } from '@/components/SummaryCard';
+import { InstagramCard } from '@/components/InstagramCard';
 import { summarizeUrl } from '@/app/actions/summarize';
-import { Provider, PlatformSummaries } from '@/lib/types';
+import {
+  Provider,
+  Platform,
+  PlatformSummaries,
+  InstagramPost,
+  ALL_PLATFORMS,
+  PLATFORM_LABELS_ALL,
+} from '@/lib/types';
 
 const LS_PROVIDER = 'ss_provider';
 const LS_API_KEY = 'ss_api_key';
 const LS_HISTORY = 'ss_history';
 
+const PLATFORM_SELECTED_STYLE: Record<Platform, string> = {
+  twitter:   'bg-sky-500   border-sky-500   text-white',
+  thread:    'bg-gray-700  border-gray-700  text-white',
+  linkedin:  'bg-blue-700  border-blue-700  text-white',
+  geekNews:  'bg-pink-500  border-pink-500  text-white',
+  instagram: 'bg-fuchsia-600 border-fuchsia-600 text-white',
+};
+
+const PLATFORM_HOVER_STYLE: Record<Platform, string> = {
+  twitter:   'hover:border-sky-300   hover:text-sky-600',
+  thread:    'hover:border-gray-400  hover:text-gray-700',
+  linkedin:  'hover:border-blue-400  hover:text-blue-700',
+  geekNews:  'hover:border-pink-400  hover:text-pink-600',
+  instagram: 'hover:border-fuchsia-400 hover:text-fuchsia-600',
+};
+
 export default function Home() {
   const [provider, setProvider] = useState<Provider>('anthropic');
   const [apiKey, setApiKey] = useState('');
   const [url, setUrl] = useState('');
-  const [summaries, setSummaries] = useState<PlatformSummaries | null>(null);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<Set<Platform>>(
+    new Set(ALL_PLATFORMS)
+  );
+  const [summaries, setSummaries] = useState<Partial<PlatformSummaries> | null>(null);
+  const [instagramPost, setInstagramPost] = useState<InstagramPost | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<string[]>([]);
   const [isPending, startTransition] = useTransition();
@@ -38,16 +66,30 @@ export default function Home() {
     localStorage.setItem(LS_API_KEY, key);
   }
 
+  function togglePlatform(platform: Platform) {
+    setSelectedPlatforms((prev) => {
+      const next = new Set(prev);
+      if (next.has(platform)) {
+        if (next.size === 1) return prev; // 최소 1개 유지
+        next.delete(platform);
+      } else {
+        next.add(platform);
+      }
+      return next;
+    });
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!apiKey || !url) return;
+    if (!apiKey || !url || selectedPlatforms.size === 0) return;
 
     setError(null);
     setSummaries(null);
+    setInstagramPost(null);
 
     startTransition(async () => {
       try {
-        const result = await summarizeUrl(url, provider, apiKey);
+        const result = await summarizeUrl(url, provider, apiKey, Array.from(selectedPlatforms));
 
         if (result.error) {
           setError(result.error);
@@ -55,6 +97,7 @@ export default function Home() {
         }
 
         setSummaries(result.summaries ?? null);
+        setInstagramPost(result.instagramPost ?? null);
 
         const next = [url, ...history.filter((h) => h !== url)].slice(0, 10);
         setHistory(next);
@@ -69,7 +112,8 @@ export default function Home() {
     });
   }
 
-  const canSubmit = !!apiKey && !!url && !isPending;
+  const canSubmit = !!apiKey && !!url && !isPending && selectedPlatforms.size > 0;
+  const hasResults = (summaries && Object.keys(summaries).length > 0) || instagramPost;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50">
@@ -98,7 +142,7 @@ export default function Home() {
           <label className="block text-base sm:text-lg font-semibold text-gray-800">
             🌐 URL
           </label>
-          <form onSubmit={handleSubmit} className="space-y-3">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <input
               type="url"
               value={url}
@@ -122,6 +166,45 @@ export default function Home() {
                 ))}
               </div>
             )}
+
+            {/* 플랫폼 선택 */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700">생성할 플랫폼</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSelectedPlatforms(
+                      selectedPlatforms.size === ALL_PLATFORMS.length
+                        ? new Set([ALL_PLATFORMS[0]])
+                        : new Set(ALL_PLATFORMS)
+                    )
+                  }
+                  className="text-xs text-indigo-500 hover:text-indigo-700 transition-colors"
+                >
+                  {selectedPlatforms.size === ALL_PLATFORMS.length ? '전체 해제' : '전체 선택'}
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {ALL_PLATFORMS.map((platform) => {
+                  const isSelected = selectedPlatforms.has(platform);
+                  return (
+                    <button
+                      key={platform}
+                      type="button"
+                      onClick={() => togglePlatform(platform)}
+                      className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-all active:scale-95 ${
+                        isSelected
+                          ? PLATFORM_SELECTED_STYLE[platform]
+                          : `bg-white border-gray-200 text-gray-400 ${PLATFORM_HOVER_STYLE[platform]}`
+                      }`}
+                    >
+                      {PLATFORM_LABELS_ALL[platform]}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
             <button
               type="submit"
@@ -152,11 +235,14 @@ export default function Home() {
         )}
 
         {/* 요약 결과 */}
-        {summaries && (
+        {hasResults && (
           <div className="space-y-4">
-            {(['twitter', 'thread', 'linkedin', 'geekNews'] as const).map((platform) => (
-              <SummaryCard key={platform} platform={platform} text={summaries[platform]} />
-            ))}
+            {(['twitter', 'thread', 'linkedin', 'geekNews'] as const)
+              .filter((p) => summaries?.[p])
+              .map((platform) => (
+                <SummaryCard key={platform} platform={platform} text={summaries![platform]!} />
+              ))}
+            {instagramPost && <InstagramCard post={instagramPost} />}
           </div>
         )}
       </main>

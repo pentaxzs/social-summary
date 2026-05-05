@@ -39,15 +39,43 @@ export interface PlatformSummaries {
   geekNews: string;
 }
 
+export type TextPlatform = keyof PlatformSummaries;
+export type Platform = TextPlatform | 'instagram';
+
+export interface InstagramSlide {
+  slide_number: number;
+  headline: string;
+  body?: string;
+  background_color: string;
+}
+
+export interface InstagramPost {
+  title: string;
+  slides: InstagramSlide[];
+  caption: string;
+}
+
 export interface SummarizeResult {
-  summaries: PlatformSummaries;
+  summaries: Partial<PlatformSummaries>;
+  instagramPost: InstagramPost | null;
   error?: never;
 }
 
 export interface SummarizeError {
   summaries?: never;
+  instagramPost?: never;
   error: string;
 }
+
+export const ALL_PLATFORMS: Platform[] = ['twitter', 'thread', 'linkedin', 'geekNews', 'instagram'];
+
+export const PLATFORM_LABELS_ALL: Record<Platform, string> = {
+  twitter: '🐦 Twitter',
+  thread: '🧵 Thread',
+  linkedin: '💼 LinkedIn',
+  geekNews: '🤓 Geek News',
+  instagram: '📸 Instagram',
+};
 
 export type SummarizeResponse = SummarizeResult | SummarizeError;
 
