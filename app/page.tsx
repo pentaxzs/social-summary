@@ -38,9 +38,8 @@ export default function Home() {
   const [provider, setProvider] = useState<Provider>('anthropic');
   const [apiKey, setApiKey] = useState('');
   const [url, setUrl] = useState('');
-  const [selectedPlatforms, setSelectedPlatforms] = useState<Set<Platform>>(
-    new Set(ALL_PLATFORMS)
-  );
+  const [selectedPlatforms, setSelectedPlatforms] = useState<Set<Platform>>(new Set());
+  const [toast, setToast] = useState(false);
   const [summaries, setSummaries] = useState<Partial<PlatformSummaries> | null>(null);
   const [instagramPost, setInstagramPost] = useState<InstagramPost | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -77,6 +76,11 @@ export default function Home() {
       }
       return next;
     });
+  }
+
+  function showToast() {
+    setToast(true);
+    setTimeout(() => setToast(false), 2500);
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -207,13 +211,23 @@ export default function Home() {
             </div>
 
             <button
-              type="submit"
-              disabled={!canSubmit}
+              type={canSubmit ? 'submit' : 'button'}
+              onClick={!canSubmit ? showToast : undefined}
+              disabled={isPending}
               className="w-full py-3 sm:py-3.5 rounded-xl bg-indigo-600 text-white font-semibold text-sm sm:text-base hover:bg-indigo-700 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
             >
               {isPending ? '✨ 요약 생성 중...' : '요약 생성하기'}
             </button>
           </form>
+        </div>
+
+        {/* 토스트 */}
+        <div
+          className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl bg-gray-900 text-white text-sm font-medium shadow-lg transition-all duration-300 whitespace-nowrap ${
+            toast ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3 pointer-events-none'
+          }`}
+        >
+          📌 생성할 플랫폼을 하나 이상 선택해주세요
         </div>
 
         {/* 로딩 */}
