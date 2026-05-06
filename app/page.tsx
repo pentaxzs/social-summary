@@ -1,6 +1,11 @@
 'use client';
 
 import { useState, useEffect, useRef, useTransition } from 'react';
+import { Plus_Jakarta_Sans } from 'next/font/google';
+
+const plusJakarta = Plus_Jakarta_Sans({ subsets: ['latin'], weight: ['800'] });
+
+const HEADER_EMOJIS = ['📣', '🚀', '✨', '🌐', '💬'];
 import { ApiKeyInput } from '@/components/ApiKeyInput';
 import { SummaryCard } from '@/components/SummaryCard';
 import { InstagramCard } from '@/components/InstagramCard';
@@ -48,6 +53,7 @@ export default function Home() {
   const [history, setHistory] = useState<string[]>([]);
   const [isPending, startTransition] = useTransition();
   const loadingRef = useRef<HTMLDivElement>(null);
+  const [headerEmoji] = useState(() => HEADER_EMOJIS[Math.floor(Math.random() * HEADER_EMOJIS.length)]);
 
   useEffect(() => {
     if (isPending && loadingRef.current) {
@@ -133,8 +139,8 @@ export default function Home() {
 
         {/* 헤더 */}
         <div className="text-center space-y-2">
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 tracking-tight">
-            📣 Social Summary
+          <h1 className={`${plusJakarta.className} text-3xl sm:text-4xl font-extrabold text-gray-900 tracking-tight`}>
+            {headerEmoji} Social Summary
           </h1>
           <p className="text-gray-500 text-sm sm:text-base">
             URL을 입력하면 SNS 요약문을 자동으로 생성해요.
