@@ -38,7 +38,9 @@ export default function Home() {
   const [provider, setProvider] = useState<Provider>('anthropic');
   const [apiKey, setApiKey] = useState('');
   const [url, setUrl] = useState('');
-  const [selectedPlatforms, setSelectedPlatforms] = useState<Set<Platform>>(new Set());
+  const [selectedPlatforms, setSelectedPlatforms] = useState<Set<Platform>>(
+    () => new Set([ALL_PLATFORMS[Math.floor(Math.random() * ALL_PLATFORMS.length)]])
+  );
   const [toast, setToast] = useState(false);
   const [summaries, setSummaries] = useState<Partial<PlatformSummaries> | null>(null);
   const [instagramPost, setInstagramPost] = useState<InstagramPost | null>(null);
@@ -69,7 +71,6 @@ export default function Home() {
     setSelectedPlatforms((prev) => {
       const next = new Set(prev);
       if (next.has(platform)) {
-        if (next.size === 1) return prev; // 최소 1개 유지
         next.delete(platform);
       } else {
         next.add(platform);
