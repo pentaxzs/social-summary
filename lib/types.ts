@@ -42,11 +42,24 @@ export interface PlatformSummaries {
 export type TextPlatform = keyof PlatformSummaries;
 export type Platform = TextPlatform | 'instagram';
 
+export type InstagramSlideLayout = 'cover' | 'content' | 'stat';
+
 export interface InstagramSlide {
   slide_number: number;
+  layout?: InstagramSlideLayout;
   headline: string;
   body?: string;
   background_color: string;
+  accent_color: string;
+  // cover
+  label?: string;
+  // content
+  keyword?: string;
+  // stat
+  stat_value?: string;
+  stat_unit?: string;
+  stat_badge?: string;
+  source?: string;
 }
 
 export interface InstagramPost {
