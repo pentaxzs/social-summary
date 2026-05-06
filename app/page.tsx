@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useTransition } from 'react';
+import { useState, useEffect, useRef, useTransition } from 'react';
 import { ApiKeyInput } from '@/components/ApiKeyInput';
 import { SummaryCard } from '@/components/SummaryCard';
 import { InstagramCard } from '@/components/InstagramCard';
@@ -47,6 +47,13 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<string[]>([]);
   const [isPending, startTransition] = useTransition();
+  const loadingRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isPending && loadingRef.current) {
+      loadingRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [isPending]);
 
   useEffect(() => {
     const savedProvider = localStorage.getItem(LS_PROVIDER) as Provider | null;
@@ -230,6 +237,9 @@ export default function Home() {
         >
           📌 생성할 플랫폼을 하나 이상 선택해주세요
         </div>
+
+        {/* 로딩 앵커 */}
+        <div ref={loadingRef} />
 
         {/* 로딩 */}
         {isPending && (
