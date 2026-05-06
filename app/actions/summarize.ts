@@ -78,21 +78,43 @@ const INSTAGRAM_PROMPT = (title: string, content: string) => `
 기사 본문:
 ${content}
 
-[슬라이드 수 결정]
-기사의 핵심 아이디어 수 기준:
-- 2~3개 → 4장 / 4개 → 5장 / 5개 이상 → 6장
+[슬라이드 수 - 반드시 5~7장]
+- 핵심 아이디어 2~3개 → 5장
+- 핵심 아이디어 4개 → 6장
+- 핵심 아이디어 5개 이상 → 7장
+(1번=cover 훅, 마지막=content 정리/CTA, 중간=content+stat 혼합)
 
-[레이아웃 타입 - 반드시 지정]
-layout 필드를 각 슬라이드에 명시하세요:
-- "cover": 1번 슬라이드 전용. 제목 중심, 대형 헤드라인
-- "stat": 기사에 강조할 수치·통계·핵심 지표가 있을 때 (예: 67%, 3배, 29분, 1조원)
-- "content": 나머지 슬라이드
+[레이아웃 타입]
+- "cover": 1번 전용. 대형 제목 중심
+- "stat": 강조할 수치·통계가 있을 때 (%, 배, 분, 원 단위 등)
+- "content": 나머지
 
-[accent_color 지정 - 반드시 포함]
-background_color와 대비되는 포인트 색상:
-- 어두운 배경 → 밝은 accent: #00c896, #60d394, #f5c518, #ff6b35, #7ecef4
-- 밝은 배경 → 진한 accent: #1e6b4a, #1e3a5f, #7f1d1d, #4a1d96
-전체 슬라이드에서 accent_color를 통일하세요 (1~2가지).
+[accent_color]
+배경과 대비되는 포인트색. 전체 슬라이드 통일:
+- 어두운 배경 → #00c896 / #f5c518 / #7ecef4 / #ff6b35
+- 밝은 배경 → #1e6b4a / #1e3a5f / #7f1d1d / #4a1d96
+
+[레이아웃별 글자 수 제한 — 카드 레이아웃 균형을 위해 반드시 준수]
+
+cover:
+  label:    최대 10자  예) "카드뉴스", "IT 트렌드"
+  headline: 한 줄 최대 11자, 반드시 2줄로 구성, 줄바꿈은 \\n 사용
+            예) "AI가 바꾸는\\n세상의 규칙"
+  body:     최대 26자 (1줄)  예) "지금 알아야 할 5가지 변화"
+
+content:
+  keyword:  최대 5자   예) "핵심", "배경", "결론", "전망"
+  headline: 한 줄 최대 12자, 1~2줄. 2줄일 경우 \\n 사용
+            예) "왜 지금\\n중요한가"
+  body:     한 줄 최대 20자, 2~3줄, 줄바꿈은 \\n 사용
+            예) "기존 방식으로는 한계에\\n도달했다. 새로운 접근이\\n필요한 시점이다."
+
+stat:
+  stat_badge:  최대 6자   예) "STAT", "KEY", "수치"
+  stat_value:  최대 5자   예) "67", "3.5", "1200"  (단위 제외 숫자만)
+  stat_unit:   최대 3자   예) "%", "분", "배", "억"
+  headline:    최대 24자  (수치 설명 1줄)
+  source:      최대 18자  예) "McKinsey 2024"
 
 [JSON 출력 형식 - JSON만 반환, 다른 텍스트 없이]
 {
@@ -102,8 +124,8 @@ background_color와 대비되는 포인트 색상:
       "slide_number": 1,
       "layout": "cover",
       "label": "카드뉴스",
-      "headline": "2줄 이내 핵심 제목 (최대 20자)",
-      "body": "한 줄 부제 (40자 이내, 선택)",
+      "headline": "AI가 바꾸는\\n세상의 규칙",
+      "body": "지금 알아야 할 5가지 변화",
       "background_color": "#f5f5f0",
       "accent_color": "#1e6b4a"
     },
@@ -113,17 +135,17 @@ background_color와 대비되는 포인트 색상:
       "stat_badge": "STAT",
       "stat_value": "67",
       "stat_unit": "%",
-      "headline": "수치 설명 (30자 이내)",
-      "source": "출처명 (선택)",
+      "headline": "기업 중 AI 도입 완료 비율",
+      "source": "McKinsey 2024",
       "background_color": "#0a0a0a",
       "accent_color": "#00c896"
     },
     {
       "slide_number": 3,
       "layout": "content",
-      "keyword": "핵심 키워드",
-      "headline": "슬라이드 제목 (15자 이내)",
-      "body": "2~3줄 본문 내용. 줄바꿈은 \\n 사용.",
+      "keyword": "배경",
+      "headline": "왜 지금\\n중요한가",
+      "body": "기존 방식으로는 한계에\\n도달했다. 새로운 접근이\\n필요한 시점이다.",
       "background_color": "#1e3a5f",
       "accent_color": "#7ecef4"
     }
@@ -131,22 +153,11 @@ background_color와 대비되는 포인트 색상:
   "caption": "해시태그 포함 270~330자 캡션"
 }
 
-[슬라이드 작성 규칙]
-- cover: label은 "카드뉴스" 또는 주제 카테고리, headline은 2줄로 구성
-- stat: stat_value는 숫자만(예: "67"), stat_unit은 단위(예: "%"), headline은 수치 설명
-- content: keyword는 2~4자 짧은 단어, body는 핵심 내용 2~3줄
-- 1번: 반드시 cover, 호기심 유발
-- 마지막: content 레이아웃으로 핵심 정리 + 저장/공유 유도
-- 원문 복사 금지 — 재구성 필수
-
-[캡션 작성 규칙]
-- 270~330자 (해시태그 포함)
-- 첫 문장: 스크롤 멈추는 훅
-- CTA: 저장/공유 유도
-- 해시태그 5~7개: 한글 2~3개 + 영문 2~3개 혼용
-
-[톤]
-- 인사이트 있고 약간 도발적, 실용적
+[추가 규칙]
+- 원문 문장 복사 금지 — 재구성 필수
+- stat 슬라이드는 수치가 있을 때만 사용 (없으면 content로 대체)
+- 마지막 슬라이드: "저장하고 나중에 다시 봐요" 류의 CTA 포함
+- 캡션: 첫 문장 훅 + 인사이트 + CTA + 한글/영문 해시태그 5~7개
 `.trim();
 
 export async function summarizeUrl(

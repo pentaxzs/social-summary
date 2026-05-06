@@ -41,6 +41,23 @@ function wrapText(
   return lines;
 }
 
+// \n을 먼저 존중하고, 각 세그먼트를 width 기준으로 추가 줄바꿈
+function splitLines(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+  maxLines: number
+): string[] {
+  const result: string[] = [];
+  const segments = text.replace(/\\n/g, '\n').split('\n').filter(s => s.trim());
+  for (const seg of segments) {
+    const wrapped = wrapText(ctx, seg.trim(), maxWidth, maxLines - result.length);
+    result.push(...wrapped);
+    if (result.length >= maxLines) break;
+  }
+  return result.slice(0, maxLines);
+}
+
 function roundRect(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, w: number, h: number, r: number
@@ -72,7 +89,7 @@ function drawCover(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: numb
   // Measure headline
   const HL = 100, HL_LH = 122;
   ctx.font = `900 ${HL}px ${F}`;
-  const hlLines = wrapText(ctx, slide.headline, S - PAD * 2, 3);
+  const hlLines = splitLines(ctx, slide.headline, S - PAD * 2, 3);
 
   // Calculate total block height to center it
   const labelH  = slide.label ? 36 + 28 : 0;
@@ -134,7 +151,7 @@ function drawContent(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: nu
   // Measure headline
   const HL = 86, HL_LH = 106;
   ctx.font = `900 ${HL}px ${F}`;
-  const hlLines = wrapText(ctx, slide.headline, S - PAD * 2, 3);
+  const hlLines = splitLines(ctx, slide.headline, S - PAD * 2, 3);
   const hlH = hlLines.length * HL_LH;
 
   const BODY_FS = 42, BODY_LH = BODY_FS + 14;
@@ -308,8 +325,8 @@ function CoverPreview({ slide, index, total }: { slide: InstagramSlide; index: n
         </p>
       )}
       <h1 className="font-black text-center mb-3 sm:mb-4"
-        style={{ color: tc, fontSize: 'clamp(1.75rem, 7vw, 3.25rem)', lineHeight: 1.15 }}>
-        {slide.headline}
+        style={{ color: tc, fontSize: 'clamp(1.75rem, 7vw, 3.25rem)', lineHeight: 1.15, whiteSpace: 'pre-line' }}>
+        {slide.headline.replace(/\\n/g, '\n')}
       </h1>
       <div className="mb-3" style={{ background: accent, width: 72, height: 4, borderRadius: 2 }} />
       {slide.body && (
@@ -337,8 +354,8 @@ function ContentPreview({ slide, index, total }: { slide: InstagramSlide; index:
         </p>
       )}
       <h2 className="font-black leading-tight mb-2 sm:mb-3"
-        style={{ color: tc, fontSize: 'clamp(1.55rem, 6.5vw, 2.75rem)', lineHeight: 1.18 }}>
-        {slide.headline}
+        style={{ color: tc, fontSize: 'clamp(1.55rem, 6.5vw, 2.75rem)', lineHeight: 1.18, whiteSpace: 'pre-line' }}>
+        {slide.headline.replace(/\\n/g, '\n')}
       </h2>
       <div className="mb-3 sm:mb-4" style={{ background: accent, width: 44, height: 3, borderRadius: 2 }} />
       {bodyFormatted && (
