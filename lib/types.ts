@@ -83,7 +83,7 @@ export interface SummarizeError {
 export const ALL_PLATFORMS: Platform[] = ['twitter', 'thread', 'linkedin', 'geekNews', 'instagram'];
 
 export const PLATFORM_LABELS_ALL: Record<Platform, string> = {
-  twitter: '𝕏 X(Twitter)',
+  twitter: '𝕏 Twitter',
   thread: '🧵 Thread',
   linkedin: '💼 LinkedIn',
   geekNews: '🤓 Geek News',
@@ -100,7 +100,7 @@ export const PLATFORM_LIMITS: Record<keyof PlatformSummaries, number> = {
 } as const;
 
 export const PLATFORM_LABELS: Record<keyof PlatformSummaries, string> = {
-  twitter: '𝕏 X(Twitter)',
+  twitter: '𝕏 Twitter',
   thread: '🧵 Thread',
   linkedin: '💼 LinkedIn',
   geekNews: '🤓 Geek News',
