@@ -253,7 +253,7 @@ export default function Home() {
         {hasResults && (
           <div className="space-y-4">
             {(['twitter', 'thread', 'linkedin', 'geekNews'] as const)
-              .filter((p) => summaries?.[p])
+              .filter((p) => selectedPlatforms.has(p) && summaries?.[p])
               .map((platform) => (
                 <SummaryCard key={platform} platform={platform} text={summaries![platform]!} />
               ))}
