@@ -188,52 +188,15 @@ function drawContent(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: nu
   const LEFT = 90, PAD = 90;
   const emoji = getKeywordEmoji(slide.keyword, index);
 
-  ctx.textBaseline = 'top';
-
-  // ── Emoji section marker (top-center) ──
-  const EMOJI_CY = 118;
-  const EMOJI_SIZE = 88;
-
-  // Soft glow halo behind emoji
-  ctx.save();
-  ctx.filter = 'blur(28px)';
-  const halo = ctx.createRadialGradient(S / 2, EMOJI_CY, 0, S / 2, EMOJI_CY, 90);
-  halo.addColorStop(0, hexToRgba(slide.accent_color, 0.45));
-  halo.addColorStop(1, hexToRgba(slide.accent_color, 0));
-  ctx.fillStyle = halo;
-  ctx.fillRect(S / 2 - 120, EMOJI_CY - 90, 240, 180);
-  ctx.filter = 'none';
-  ctx.restore();
-
-  // Emoji
-  ctx.font = `${EMOJI_SIZE}px serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(emoji, S / 2, EMOJI_CY);
-
-  // Thin separator line below emoji
-  ctx.fillStyle = hexToRgba(slide.accent_color, 0.30);
-  ctx.fillRect(S / 2 - 36, EMOJI_CY + 60, 72, 2);
-
-  // ── Text section ──
-  ctx.textBaseline = 'top';
-
-  // Keyword (top-left, below emoji zone)
-  const kwY = 215;
-  if (slide.keyword) {
-    ctx.font = `700 34px ${F}`;
-    ctx.fillStyle = slide.accent_color;
-    ctx.textAlign = 'left';
-    ctx.fillText(slide.keyword, LEFT, kwY);
-  }
-
-  // Measure text block
+  // ── Measure all blocks first for vertical centering ──
+  const KW_FS = 34, EMOJI_FS = 48;
   const HL = 82, HL_LH = 102;
+  const BODY_FS = 40, BODY_LH = BODY_FS + 14;
+
   ctx.font = `900 ${HL}px ${F}`;
   const hlLines = splitLines(ctx, slide.headline, S - PAD * 2, 3);
   const hlH = hlLines.length * HL_LH;
 
-  const BODY_FS = 40, BODY_LH = BODY_FS + 14;
   const rawBody = (slide.body || '').replace(/\\n/g, '\n');
   const bodyParagraphs = rawBody.split('\n').filter(Boolean);
   ctx.font = `400 ${BODY_FS}px ${F}`;
@@ -244,27 +207,47 @@ function drawContent(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: nu
     if (bodyLinesAll.length >= 5) break;
   }
   const bodyH = bodyLinesAll.length * BODY_LH;
-  const divH = 36 + 4 + 36;
-  const contentH = hlH + divH + bodyH;
 
-  // Text starts after emoji + keyword area
-  const textZoneTop = slide.keyword ? kwY + 34 + 20 : kwY;
-  const y0 = Math.max(textZoneTop, Math.round(textZoneTop + (S - textZoneTop - 80 - contentH) / 2));
-  let y = Math.max(textZoneTop, y0);
+  // Block heights: [emoji+keyword row] + gap + headline + divider + body
+  const kwRowH = Math.max(EMOJI_FS, KW_FS) + 4; // emoji and keyword are same line
+  const totalH = kwRowH + 40 + hlH + 36 + 4 + 36 + bodyH;
+  let y = Math.max(80, Math.round((S - totalH) / 2));
 
-  // Headline
+  ctx.textBaseline = 'top';
+
+  // ── Emoji + Keyword inline (left-aligned) ──
+  // Draw emoji
+  ctx.font = `${EMOJI_FS}px serif`;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  const emojiMidY = y + kwRowH / 2;
+  ctx.fillText(emoji, LEFT, emojiMidY);
+
+  // Draw keyword text next to emoji
+  if (slide.keyword) {
+    const emojiW = ctx.measureText(emoji).width;
+    ctx.font = `700 ${KW_FS}px ${F}`;
+    ctx.fillStyle = slide.accent_color;
+    ctx.textBaseline = 'middle';
+    ctx.fillText(slide.keyword, LEFT + emojiW + 16, emojiMidY);
+  }
+
+  y += kwRowH + 40;
+
+  // ── Headline ──
   ctx.font = `900 ${HL}px ${F}`;
   ctx.fillStyle = tc;
   ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
   hlLines.forEach((line, i) => ctx.fillText(line, LEFT, y + i * HL_LH));
   y += hlH + 36;
 
-  // Divider
+  // ── Divider ──
   ctx.fillStyle = slide.accent_color;
   ctx.fillRect(LEFT, y, 72, 4);
   y += 4 + 36;
 
-  // Body
+  // ── Body ──
   if (bodyLinesAll.length > 0) {
     ctx.font = `400 ${BODY_FS}px ${F}`;
     ctx.fillStyle = sc;
@@ -511,30 +494,17 @@ function ContentPreview({ slide, index, total }: { slide: InstagramSlide; index:
     <div className="w-full aspect-square relative flex flex-col overflow-hidden" style={{ background: bg }}>
       <div className="absolute top-3 right-4 text-xs" style={{ color: sc }}>{index + 1} / {total}</div>
 
-      {/* Emoji section marker */}
-      <div className="flex flex-col items-center pt-5 pb-2" style={{ position: 'relative' }}>
-        {/* Glow halo */}
-        <div style={{
-          position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)',
-          width: 120, height: 120,
-          background: `radial-gradient(circle, ${hexToRgba(accent, 0.30)} 0%, transparent 70%)`,
-          filter: 'blur(16px)',
-          pointerEvents: 'none',
-        }} />
-        <span style={{ fontSize: 'clamp(2rem, 8vw, 3rem)', lineHeight: 1, position: 'relative' }}>
-          {emoji}
-        </span>
-        {/* Subtle separator */}
-        <div className="mt-2" style={{ width: 40, height: 1.5, background: hexToRgba(accent, 0.35), borderRadius: 2 }} />
-      </div>
-
-      {/* Text content */}
-      <div className="flex flex-col justify-center flex-1 px-7 sm:px-9 pb-6">
-        {slide.keyword && (
-          <p className="text-xs font-bold tracking-wider uppercase mb-2 sm:mb-3" style={{ color: accent }}>
-            {slide.keyword}
-          </p>
-        )}
+      {/* Text content — vertically centered */}
+      <div className="flex flex-col justify-center flex-1 px-7 sm:px-9 py-8">
+        {/* Emoji + Keyword inline */}
+        <div className="flex items-center gap-2 mb-3 sm:mb-4">
+          <span style={{ fontSize: 'clamp(1.4rem, 5vw, 2rem)', lineHeight: 1 }}>{emoji}</span>
+          {slide.keyword && (
+            <p className="text-xs sm:text-sm font-bold tracking-wider uppercase" style={{ color: accent }}>
+              {slide.keyword}
+            </p>
+          )}
+        </div>
         <h2 className="font-black leading-tight mb-2 sm:mb-3"
           style={{ color: tc, fontSize: 'clamp(1.5rem, 6vw, 2.6rem)', lineHeight: 1.18, whiteSpace: 'pre-line' }}>
           {slide.headline.replace(/\\n/g, '\n')}
