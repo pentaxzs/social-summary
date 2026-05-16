@@ -364,12 +364,12 @@ function drawOutro(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: numb
   let y = 285;
 
   ctx.font = `500 30px ${F}`;
-  ctx.fillStyle = hexToRgba(accent, 0.70);
+  ctx.fillStyle = 'rgba(255,255,255,0.38)';
   ctx.fillText('NEWSLETTER', cx, y);
   y += 30 + 44;
 
   ctx.font = `600 66px ${F}`;
-  ctx.fillStyle = hexToRgba(accent, 0.85);
+  ctx.fillStyle = 'rgba(255,255,255,0.70)';
   ctx.fillText('매주 수요일 저녁,', cx, y);
   y += 66 + 18;
 
@@ -379,13 +379,13 @@ function drawOutro(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: numb
   y += 106 + 46;
 
   ctx.font = `400 48px ${F}`;
-  ctx.fillStyle = tc;
+  ctx.fillStyle = 'rgba(255,255,255,0.88)';
   const bodyLines = splitLines(ctx, '뉴스레터에서 새로운 이야기를 보냅니다 ✉️', S - 180, 2);
   bodyLines.forEach((line, i) => ctx.fillText(line, cx, y + i * 62));
   y += bodyLines.length * 62 + 38;
 
   ctx.font = `400 34px ${F}`;
-  ctx.fillStyle = sc;
+  ctx.fillStyle = 'rgba(255,255,255,0.68)';
   ctx.fillText('프로필 링크 또는', cx, y);
   y += 34 + 8;
   ctx.fillText("'메이커스노트'를 검색해보세요.", cx, y);
@@ -593,19 +593,19 @@ function OutroPreview({ slide, index, total }: { slide: InstagramSlide; index: n
       <div className="absolute top-3 right-4 text-xs" style={{ color: sc, zIndex: 1 }}>{index + 1} / {total}</div>
 
       <div className="relative text-center flex flex-col items-center" style={{ zIndex: 1 }}>
-        <p className="text-xs font-semibold tracking-widest mb-3" style={{ color: hexToRgba(accent, 0.70) }}>
+        <p className="text-xs font-semibold tracking-widest mb-3" style={{ color: 'rgba(255,255,255,0.38)' }}>
           NEWSLETTER
         </p>
-        <p className="font-semibold leading-snug mb-0.5" style={{ color: hexToRgba(accent, 0.85), fontSize: 'clamp(1rem, 4vw, 1.65rem)' }}>
+        <p className="font-semibold leading-snug mb-0.5" style={{ color: 'rgba(255,255,255,0.70)', fontSize: 'clamp(1rem, 4vw, 1.65rem)' }}>
           매주 수요일 저녁,
         </p>
         <p className="font-black leading-snug mb-4" style={{ color: '#ffffff', fontSize: 'clamp(1.5rem, 6vw, 2.5rem)' }}>
           메이커스노트
         </p>
-        <p className="text-center leading-relaxed mb-3" style={{ color: tc, fontSize: 'clamp(0.78rem, 3vw, 1.05rem)' }}>
+        <p className="text-center leading-relaxed mb-3" style={{ color: 'rgba(255,255,255,0.88)', fontSize: 'clamp(0.78rem, 3vw, 1.05rem)' }}>
           뉴스레터에서 새로운 이야기를<br />보냅니다 ✉️
         </p>
-        <p className="text-center" style={{ color: sc, fontSize: 'clamp(0.68rem, 2.5vw, 0.88rem)' }}>
+        <p className="text-center" style={{ color: 'rgba(255,255,255,0.68)', fontSize: 'clamp(0.68rem, 2.5vw, 0.88rem)' }}>
           프로필 링크 또는 &apos;메이커스노트&apos;를 검색해보세요.
         </p>
       </div>
