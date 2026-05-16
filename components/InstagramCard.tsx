@@ -191,7 +191,7 @@ function drawContent(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: nu
   // ── Measure all blocks first for vertical centering ──
   const KW_FS = 34, EMOJI_FS = 48;
   const HL = 82, HL_LH = 102;
-  const BODY_FS = 40, BODY_LH = BODY_FS + 14;
+  const BODY_FS = 44, BODY_LH = BODY_FS + 16;
 
   ctx.font = `900 ${HL}px ${F}`;
   const hlLines = splitLines(ctx, slide.headline, S - PAD * 2, 3);
@@ -250,7 +250,7 @@ function drawContent(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: nu
   // ── Body ──
   if (bodyLinesAll.length > 0) {
     ctx.font = `400 ${BODY_FS}px ${F}`;
-    ctx.fillStyle = sc;
+    ctx.fillStyle = tc === '#ffffff' ? 'rgba(255,255,255,0.82)' : 'rgba(0,0,0,0.75)';
     ctx.textAlign = 'left';
     bodyLinesAll.forEach((line, i) => ctx.fillText(line, LEFT, y + i * BODY_LH));
   }
@@ -511,7 +511,8 @@ function ContentPreview({ slide, index, total }: { slide: InstagramSlide; index:
         </h2>
         <div className="mb-3 sm:mb-4" style={{ background: accent, width: 40, height: 3, borderRadius: 2 }} />
         {bodyFormatted && (
-          <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-line" style={{ color: sc }}>
+          <p className="text-sm sm:text-base leading-relaxed whitespace-pre-line"
+            style={{ color: tc === '#ffffff' ? 'rgba(255,255,255,0.82)' : 'rgba(0,0,0,0.75)' }}>
             {bodyFormatted}
           </p>
         )}
