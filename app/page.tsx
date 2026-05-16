@@ -109,7 +109,7 @@ export default function Home() {
       try {
         const result = await summarizeUrl(url, provider, apiKey, Array.from(selectedPlatforms));
 
-        if (result.error) {
+        if ('error' in result && result.error) {
           setError(result.error);
           return;
         }

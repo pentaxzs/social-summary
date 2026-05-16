@@ -226,34 +226,47 @@ export async function summarizeUrl(
       if (summaries.geekNews) summaries.geekNews = `${summaries.geekNews}\n\n👉 ${url}`;
     }
 
-    // Instagram 파싱 (실패해도 텍스트 결과에 영향 없음)
+    // Instagram 파싱
     let instagramPost: InstagramPost | null = null;
-    if (includeInstagram && instaResult.status === 'fulfilled' && instaResult.value) {
-      try {
-        const instaMatch = instaResult.value.text.match(/\{[\s\S]*\}/);
-        if (instaMatch) {
-          const parsed = JSON.parse(instaMatch[0]) as InstagramPost;
-          if (parsed.slides && Array.isArray(parsed.slides) && parsed.slides.length > 0) {
-            instagramPost = parsed;
+    if (includeInstagram) {
+      if (instaResult.status === 'rejected') {
+        // Instagram만 선택한 경우 에러 전파
+        if (textPlatforms.length === 0) throw instaResult.reason;
+        // 텍스트 성공 + Instagram 실패 → 텍스트 결과만 반환
+      } else if (instaResult.status === 'fulfilled' && instaResult.value) {
+        try {
+          const instaMatch = instaResult.value.text.match(/\{[\s\S]*\}/);
+          if (instaMatch) {
+            const parsed = JSON.parse(instaMatch[0]) as InstagramPost;
+            if (parsed.slides && Array.isArray(parsed.slides) && parsed.slides.length > 0) {
+              instagramPost = parsed;
+            }
           }
+        } catch {
+          // 파싱 실패 시 null 유지
         }
-      } catch {
-        // 파싱 실패 시 null 유지
       }
     }
 
     return { summaries, instagramPost };
   } catch (err: unknown) {
-    let message = '알 수 없는 오류가 발생했습니다.';
+    const FALLBACK = '알 수 없는 오류가 발생했습니다. 다시 시도해주세요.';
+    let message = FALLBACK;
     if (err instanceof Error) {
-      message = err.message;
+      const raw = err.message || '';
+      // API 인증 오류 감지 (401, authentication, invalid key 등)
+      if (/401|authentication|invalid.*key|api.?key|unauthorized/i.test(raw)) {
+        message = 'API 키가 올바르지 않습니다. 키를 확인하고 다시 시도해주세요.';
+      } else {
+        message = raw || FALLBACK;
+      }
     } else if (typeof err === 'string') {
-      message = err;
+      message = err || FALLBACK;
     } else {
       try {
-        message = JSON.stringify(err);
+        message = JSON.stringify(err) || FALLBACK;
       } catch {
-        message = '알 수 없는 오류가 발생했습니다.';
+        message = FALLBACK;
       }
     }
     return { error: message };
