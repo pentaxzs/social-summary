@@ -380,20 +380,18 @@ function drawOutro(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: numb
 
   ctx.font = `400 48px ${F}`;
   ctx.fillStyle = 'rgba(255,255,255,0.88)';
-  const bodyLines = splitLines(ctx, '뉴스레터에서 새로운 이야기를 보냅니다 ✉️', S - 180, 2);
+  const bodyLines = splitLines(ctx, '뉴스레터를 통해 매주 새로운 소식을 받아보세요', S - 180, 2);
   bodyLines.forEach((line, i) => ctx.fillText(line, cx, y + i * 62));
-  y += bodyLines.length * 62 + 38;
+  y += bodyLines.length * 62 + 44;
 
   ctx.font = `400 34px ${F}`;
   ctx.fillStyle = 'rgba(255,255,255,0.68)';
-  ctx.fillText('프로필 링크 또는', cx, y);
-  y += 34 + 8;
-  ctx.fillText("'메이커스노트'를 검색해보세요.", cx, y);
+  ctx.fillText("프로필 링크 또는 '메이커스노트'를 검색해보세요.", cx, y);
+  y += 34 + 36;
 
-  ctx.textBaseline = 'bottom';
-  ctx.font = `500 38px ${F}`;
-  ctx.fillStyle = hexToRgba(accent, 0.92);
-  ctx.fillText('maily.so/makersnote', cx, S - 100);
+  ctx.font = `600 38px ${F}`;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText('maily.so/makersnote', cx, y);
 }
 
 /* ─── Compose full canvas ─── */
@@ -593,7 +591,7 @@ function OutroPreview({ slide, index, total }: { slide: InstagramSlide; index: n
 
       <div className="absolute top-3 right-4 text-xs" style={{ color: sc, zIndex: 1 }}>{index + 1} / {total}</div>
 
-      <div className="relative text-center flex flex-col items-center" style={{ zIndex: 1 }}>
+      <div className="relative text-center flex flex-col items-center pb-6" style={{ zIndex: 1 }}>
         <p className="text-xs font-semibold tracking-widest mb-3" style={{ color: 'rgba(255,255,255,0.38)' }}>
           NEWSLETTER
         </p>
@@ -604,21 +602,15 @@ function OutroPreview({ slide, index, total }: { slide: InstagramSlide; index: n
           메이커스노트
         </p>
         <p className="text-center leading-relaxed mb-3" style={{ color: 'rgba(255,255,255,0.88)', fontSize: 'clamp(0.78rem, 3vw, 1.05rem)' }}>
-          뉴스레터에서 새로운 이야기를<br />보냅니다 ✉️
+          뉴스레터를 통해 매주 새로운 소식을 받아보세요
         </p>
-        <p className="text-center" style={{ color: 'rgba(255,255,255,0.68)', fontSize: 'clamp(0.68rem, 2.5vw, 0.88rem)' }}>
+        <p className="text-center mb-3" style={{ color: 'rgba(255,255,255,0.68)', fontSize: 'clamp(0.68rem, 2.5vw, 0.88rem)' }}>
           프로필 링크 또는 &apos;메이커스노트&apos;를 검색해보세요.
         </p>
+        <p className="text-center font-semibold" style={{ color: '#ffffff', fontSize: 'clamp(0.8rem, 2.8vw, 1rem)' }}>
+          maily.so/makersnote
+        </p>
       </div>
-
-      <p className="absolute bottom-6 text-center pointer-events-none" style={{
-        color: hexToRgba(accent, 0.92),
-        fontSize: 'clamp(0.75rem, 2.5vw, 0.95rem)',
-        fontWeight: 500,
-        zIndex: 1,
-      }}>
-        maily.so/makersnote
-      </p>
 
       <Dots index={index} total={total} accent={accent} />
     </div>
