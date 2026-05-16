@@ -42,7 +42,7 @@ export interface PlatformSummaries {
 export type TextPlatform = keyof PlatformSummaries;
 export type Platform = TextPlatform | 'instagram';
 
-export type InstagramSlideLayout = 'cover' | 'content' | 'stat';
+export type InstagramSlideLayout = 'cover' | 'content' | 'stat' | 'outro';
 
 export interface InstagramSlide {
   slide_number: number;

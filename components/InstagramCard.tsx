@@ -41,7 +41,6 @@ function wrapText(
   return lines;
 }
 
-// \n을 먼저 존중하고, 각 세그먼트를 width 기준으로 추가 줄바꿈
 function splitLines(
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -75,7 +74,63 @@ function roundRect(
   ctx.closePath();
 }
 
+function hexToRgba(hex: string, alpha: number): string {
+  const h = (hex || '#000000').replace('#', '');
+  if (h.length < 6) return `rgba(0,0,0,${alpha})`;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
 const F = `"Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif`;
+
+/* ─── Emoji helpers ─── */
+
+const KEYWORD_EMOJI_MAP: [string[], string][] = [
+  [['배경', '역사', '기원', '히스토리', '유래'], '📖'],
+  [['핵심', '포인트', '요점', '주요', '중요'], '💡'],
+  [['결론', '마무리', '요약', '정리', 'cta', '저장'], '✅'],
+  [['전망', '미래', '앞으로', '예측', '방향'], '🚀'],
+  [['분석', '해석', '인사이트', '이해'], '🔍'],
+  [['방법', '전략', '방식', '솔루션', '해결', '접근'], '🎯'],
+  [['영향', '효과', '임팩트', '결과'], '⚡'],
+  [['데이터', '수치', '통계', '숫자', '지표'], '📊'],
+  [['기술', 'ai', '인공지능', 'tech', '도구'], '⚙️'],
+  [['트렌드', '동향', '현황', '변화', '흐름'], '🔄'],
+  [['문제', '이슈', '과제', '도전', '한계'], '⚠️'],
+  [['사람', '팀', '조직', '인재', '커뮤니티'], '👥'],
+  [['돈', '비용', '투자', '수익', '경제', '금융'], '💰'],
+  [['시간', '속도', '기간', '일정', '프로세스'], '⏱️'],
+  [['성장', '증가', '개선', '발전'], '📈'],
+  [['아이디어', '혁신', '창의', '상상'], '✨'],
+  [['글로벌', '세계', '해외', '국제'], '🌐'],
+  [['디자인', '브랜드', '비주얼'], '🎨'],
+  [['콘텐츠', '미디어', '소셜', '채널'], '📱'],
+];
+
+const FALLBACK_EMOJIS = ['✨', '💡', '🚀', '🎯', '⚡', '🔍', '📖', '🔄', '📊', '🌐'];
+
+function getKeywordEmoji(keyword: string | undefined, index: number): string {
+  if (keyword) {
+    const k = keyword.toLowerCase();
+    for (const [keys, emoji] of KEYWORD_EMOJI_MAP) {
+      if (keys.some(key => k.includes(key))) return emoji;
+    }
+  }
+  return FALLBACK_EMOJIS[index % FALLBACK_EMOJIS.length];
+}
+
+function getStatEmoji(unit?: string): string {
+  if (!unit) return '📈';
+  const u = unit.toLowerCase();
+  if (u === '%') return '📊';
+  if (['원', '억', '만', '달러', '$'].some(s => u.includes(s))) return '💰';
+  if (['분', '시간', '초', 'h', 'min'].some(s => u.includes(s))) return '⏱️';
+  if (['명', '개', '곳'].some(s => u.includes(s))) return '👥';
+  if (['배'].some(s => u.includes(s))) return '📈';
+  return '📊';
+}
 
 /* ─── Canvas: Cover layout ─── */
 
@@ -86,12 +141,10 @@ function drawCover(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: numb
 
   ctx.textBaseline = 'top';
 
-  // Measure headline
   const HL = 100, HL_LH = 122;
   ctx.font = `900 ${HL}px ${F}`;
   const hlLines = splitLines(ctx, slide.headline, S - PAD * 2, 3);
 
-  // Calculate total block height to center it
   const labelH  = slide.label ? 36 + 28 : 0;
   const hlH     = hlLines.length * HL_LH;
   const divH    = 52 + 5 + 52;
@@ -99,7 +152,6 @@ function drawCover(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: numb
   const totalH  = labelH + hlH + divH + bodyH;
   let y = Math.max(80, Math.round((S - totalH) / 2));
 
-  // Label
   if (slide.label) {
     ctx.font = `500 36px ${F}`;
     ctx.fillStyle = slide.accent_color;
@@ -108,19 +160,16 @@ function drawCover(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: numb
     y += 36 + 28;
   }
 
-  // Headline
   ctx.font = `900 ${HL}px ${F}`;
   ctx.fillStyle = tc;
   ctx.textAlign = 'center';
   hlLines.forEach((line, i) => ctx.fillText(line, S / 2, y + i * HL_LH));
   y += hlH + 52;
 
-  // Divider
   ctx.fillStyle = slide.accent_color;
   ctx.fillRect(S / 2 - 64, y, 128, 5);
   y += 5 + 52;
 
-  // Body
   if (slide.body) {
     ctx.font = `400 44px ${F}`;
     ctx.fillStyle = sc;
@@ -131,30 +180,60 @@ function drawCover(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: numb
   }
 }
 
-/* ─── Canvas: Content layout ─── */
+/* ─── Canvas: Content layout (with emoji marker) ─── */
 
-function drawContent(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: number) {
+function drawContent(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: number, index: number) {
   const tc = getTextColor(slide.background_color);
   const sc = secondary(tc);
   const LEFT = 90, PAD = 90;
+  const emoji = getKeywordEmoji(slide.keyword, index);
 
   ctx.textBaseline = 'top';
 
-  // Keyword (top-left)
+  // ── Emoji section marker (top-center) ──
+  const EMOJI_CY = 118;
+  const EMOJI_SIZE = 88;
+
+  // Soft glow halo behind emoji
+  ctx.save();
+  ctx.filter = 'blur(28px)';
+  const halo = ctx.createRadialGradient(S / 2, EMOJI_CY, 0, S / 2, EMOJI_CY, 90);
+  halo.addColorStop(0, hexToRgba(slide.accent_color, 0.45));
+  halo.addColorStop(1, hexToRgba(slide.accent_color, 0));
+  ctx.fillStyle = halo;
+  ctx.fillRect(S / 2 - 120, EMOJI_CY - 90, 240, 180);
+  ctx.filter = 'none';
+  ctx.restore();
+
+  // Emoji
+  ctx.font = `${EMOJI_SIZE}px serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(emoji, S / 2, EMOJI_CY);
+
+  // Thin separator line below emoji
+  ctx.fillStyle = hexToRgba(slide.accent_color, 0.30);
+  ctx.fillRect(S / 2 - 36, EMOJI_CY + 60, 72, 2);
+
+  // ── Text section ──
+  ctx.textBaseline = 'top';
+
+  // Keyword (top-left, below emoji zone)
+  const kwY = 215;
   if (slide.keyword) {
-    ctx.font = `700 36px ${F}`;
+    ctx.font = `700 34px ${F}`;
     ctx.fillStyle = slide.accent_color;
     ctx.textAlign = 'left';
-    ctx.fillText(slide.keyword, LEFT, 96);
+    ctx.fillText(slide.keyword, LEFT, kwY);
   }
 
-  // Measure headline
-  const HL = 86, HL_LH = 106;
+  // Measure text block
+  const HL = 82, HL_LH = 102;
   ctx.font = `900 ${HL}px ${F}`;
   const hlLines = splitLines(ctx, slide.headline, S - PAD * 2, 3);
   const hlH = hlLines.length * HL_LH;
 
-  const BODY_FS = 42, BODY_LH = BODY_FS + 14;
+  const BODY_FS = 40, BODY_LH = BODY_FS + 14;
   const rawBody = (slide.body || '').replace(/\\n/g, '\n');
   const bodyParagraphs = rawBody.split('\n').filter(Boolean);
   ctx.font = `400 ${BODY_FS}px ${F}`;
@@ -165,23 +244,25 @@ function drawContent(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: nu
     if (bodyLinesAll.length >= 5) break;
   }
   const bodyH = bodyLinesAll.length * BODY_LH;
-
-  const divH = 40 + 4 + 40;
+  const divH = 36 + 4 + 36;
   const contentH = hlH + divH + bodyH;
-  const topOffset = slide.keyword ? Math.max(190, (S - contentH) / 2) : Math.max(100, (S - contentH) / 2);
-  let y = topOffset;
+
+  // Text starts after emoji + keyword area
+  const textZoneTop = slide.keyword ? kwY + 34 + 20 : kwY;
+  const y0 = Math.max(textZoneTop, Math.round(textZoneTop + (S - textZoneTop - 80 - contentH) / 2));
+  let y = Math.max(textZoneTop, y0);
 
   // Headline
   ctx.font = `900 ${HL}px ${F}`;
   ctx.fillStyle = tc;
   ctx.textAlign = 'left';
   hlLines.forEach((line, i) => ctx.fillText(line, LEFT, y + i * HL_LH));
-  y += hlH + 40;
+  y += hlH + 36;
 
   // Divider
   ctx.fillStyle = slide.accent_color;
-  ctx.fillRect(LEFT, y, 80, 4);
-  y += 4 + 40;
+  ctx.fillRect(LEFT, y, 72, 4);
+  y += 4 + 36;
 
   // Body
   if (bodyLinesAll.length > 0) {
@@ -198,23 +279,38 @@ function drawStat(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: numbe
   const tc = getTextColor(slide.background_color);
   const sc = secondary(tc);
 
+  // Sparkline background (decorative)
+  ctx.save();
+  ctx.strokeStyle = hexToRgba(slide.accent_color, 0.20);
+  ctx.lineWidth = 5;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(60, S * 0.82);
+  ctx.bezierCurveTo(S * 0.25, S * 0.70, S * 0.40, S * 0.78, S * 0.55, S * 0.68);
+  ctx.bezierCurveTo(S * 0.70, S * 0.58, S * 0.82, S * 0.50, S - 60, S * 0.36);
+  ctx.stroke();
+  ctx.restore();
+
   ctx.textBaseline = 'alphabetic';
 
-  // Badge pill (top-left)
+  // Badge pill (top-left) — with stat emoji
+  const statEmoji = getStatEmoji(slide.stat_unit);
   if (slide.stat_badge) {
     const FS = 30, PX = 22, PY = 12;
     ctx.font = `700 ${FS}px ${F}`;
-    const bw = ctx.measureText(slide.stat_badge).width + PX * 2;
+    const badgeText = `${statEmoji}  ${slide.stat_badge}`;
+    const bw = ctx.measureText(badgeText).width + PX * 2;
     const bh = FS + PY * 2;
     ctx.fillStyle = slide.accent_color;
     roundRect(ctx, 80, 80, bw, bh, 8);
     ctx.fill();
     ctx.fillStyle = slide.background_color;
     ctx.textAlign = 'left';
-    ctx.fillText(slide.stat_badge, 80 + PX, 80 + PY + FS * 0.8);
+    ctx.fillText(badgeText, 80 + PX, 80 + PY + FS * 0.8);
   }
 
-  // Large stat value + unit (same baseline, centered)
+  // Stat value + unit
   const VAL_SIZE = 210, UNIT_SIZE = 140, GAP = 14;
   ctx.font = `900 ${VAL_SIZE}px ${F}`;
   const valW = slide.stat_value ? ctx.measureText(slide.stat_value).width : 0;
@@ -236,7 +332,6 @@ function drawStat(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: numbe
     ctx.fillText(slide.stat_unit, startX + valW + GAP, baseY + (VAL_SIZE - UNIT_SIZE) * 0.38);
   }
 
-  // Headline (stat description)
   if (slide.headline) {
     ctx.textBaseline = 'top';
     ctx.font = `400 46px ${F}`;
@@ -247,7 +342,6 @@ function drawStat(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: numbe
     });
   }
 
-  // Source (bottom-left)
   if (slide.source) {
     ctx.textBaseline = 'alphabetic';
     ctx.font = `400 28px ${F}`;
@@ -255,6 +349,68 @@ function drawStat(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: numbe
     ctx.textAlign = 'left';
     ctx.fillText(`SOURCE · ${slide.source}`, 80, S - 80);
   }
+}
+
+/* ─── Canvas: Outro layout ─── */
+
+function drawOutro(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: number) {
+  const tc = getTextColor(slide.background_color);
+  const sc = secondary(tc);
+  const accent = slide.accent_color;
+  const cx = S / 2;
+
+  ctx.save();
+  ctx.filter = 'blur(60px)';
+  const glowBL = ctx.createRadialGradient(S * 0.12, S * 0.88, 0, S * 0.12, S * 0.88, 460);
+  glowBL.addColorStop(0, hexToRgba(accent, 0.55));
+  glowBL.addColorStop(0.5, hexToRgba(accent, 0.18));
+  glowBL.addColorStop(1, hexToRgba(accent, 0));
+  ctx.fillStyle = glowBL;
+  ctx.fillRect(0, 0, S, S);
+  const glowTR = ctx.createRadialGradient(S * 0.88, S * 0.12, 0, S * 0.88, S * 0.12, 260);
+  glowTR.addColorStop(0, hexToRgba(accent, 0.28));
+  glowTR.addColorStop(1, hexToRgba(accent, 0));
+  ctx.fillStyle = glowTR;
+  ctx.fillRect(0, 0, S, S);
+  ctx.filter = 'none';
+  ctx.restore();
+
+  ctx.textBaseline = 'top';
+  ctx.textAlign = 'center';
+
+  let y = 285;
+
+  ctx.font = `500 30px ${F}`;
+  ctx.fillStyle = hexToRgba(accent, 0.70);
+  ctx.fillText('NEWSLETTER', cx, y);
+  y += 30 + 44;
+
+  ctx.font = `700 72px ${F}`;
+  ctx.fillStyle = tc;
+  ctx.fillText('매주 수요일 저녁,', cx, y);
+  y += 72 + 14;
+
+  ctx.font = `900 90px ${F}`;
+  ctx.fillStyle = accent;
+  ctx.fillText('메이커스노트', cx, y);
+  y += 90 + 46;
+
+  ctx.font = `400 48px ${F}`;
+  ctx.fillStyle = tc;
+  const bodyLines = splitLines(ctx, '뉴스레터에서 새로운 이야기를 보냅니다 ✉️', S - 180, 2);
+  bodyLines.forEach((line, i) => ctx.fillText(line, cx, y + i * 62));
+  y += bodyLines.length * 62 + 38;
+
+  ctx.font = `400 34px ${F}`;
+  ctx.fillStyle = sc;
+  ctx.fillText('프로필 링크 또는', cx, y);
+  y += 34 + 8;
+  ctx.fillText("'메이커스노트'를 검색해보세요.", cx, y);
+
+  ctx.textBaseline = 'bottom';
+  ctx.font = `300 28px ${F}`;
+  ctx.fillStyle = hexToRgba(accent, 0.55);
+  ctx.fillText('maily.so/makersnote', cx, S - 65);
 }
 
 /* ─── Compose full canvas ─── */
@@ -270,11 +426,13 @@ function buildCanvas(slide: InstagramSlide, index: number, total: number): HTMLC
   ctx.fillRect(0, 0, S, S);
 
   const layout = slide.layout ?? (index === 0 ? 'cover' : 'content');
+
   if (layout === 'cover')        drawCover(ctx, slide, S);
   else if (layout === 'stat')    drawStat(ctx, slide, S);
-  else                           drawContent(ctx, slide, S);
+  else if (layout === 'outro')   drawOutro(ctx, slide, S);
+  else                           drawContent(ctx, slide, S, index);
 
-  // Slide number (top-right) — skip for stat (has badge)
+  // Slide number (top-right) — skip for stat
   if (layout !== 'stat') {
     ctx.textBaseline = 'top';
     ctx.font = `400 30px ${F}`;
@@ -311,6 +469,8 @@ function Dots({ index, total, accent }: { index: number; total: number; accent: 
   );
 }
 
+/* ─── Slide Preview Components ─── */
+
 function CoverPreview({ slide, index, total }: { slide: InstagramSlide; index: number; total: number }) {
   const bg = slide.background_color || '#1e3a5f';
   const accent = slide.accent_color || '#60a5fa';
@@ -345,24 +505,48 @@ function ContentPreview({ slide, index, total }: { slide: InstagramSlide; index:
   const tc = getTextColor(bg);
   const sc = secondary(tc);
   const bodyFormatted = (slide.body || '').replace(/\\n/g, '\n');
+  const emoji = getKeywordEmoji(slide.keyword, index);
+
   return (
-    <div className="w-full aspect-square relative flex flex-col justify-center px-7 sm:px-9 overflow-hidden" style={{ background: bg }}>
+    <div className="w-full aspect-square relative flex flex-col overflow-hidden" style={{ background: bg }}>
       <div className="absolute top-3 right-4 text-xs" style={{ color: sc }}>{index + 1} / {total}</div>
-      {slide.keyword && (
-        <p className="text-xs font-bold tracking-wider uppercase mb-3 sm:mb-4" style={{ color: accent }}>
-          {slide.keyword}
-        </p>
-      )}
-      <h2 className="font-black leading-tight mb-2 sm:mb-3"
-        style={{ color: tc, fontSize: 'clamp(1.55rem, 6.5vw, 2.75rem)', lineHeight: 1.18, whiteSpace: 'pre-line' }}>
-        {slide.headline.replace(/\\n/g, '\n')}
-      </h2>
-      <div className="mb-3 sm:mb-4" style={{ background: accent, width: 44, height: 3, borderRadius: 2 }} />
-      {bodyFormatted && (
-        <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-line" style={{ color: sc }}>
-          {bodyFormatted}
-        </p>
-      )}
+
+      {/* Emoji section marker */}
+      <div className="flex flex-col items-center pt-5 pb-2" style={{ position: 'relative' }}>
+        {/* Glow halo */}
+        <div style={{
+          position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)',
+          width: 120, height: 120,
+          background: `radial-gradient(circle, ${hexToRgba(accent, 0.30)} 0%, transparent 70%)`,
+          filter: 'blur(16px)',
+          pointerEvents: 'none',
+        }} />
+        <span style={{ fontSize: 'clamp(2rem, 8vw, 3rem)', lineHeight: 1, position: 'relative' }}>
+          {emoji}
+        </span>
+        {/* Subtle separator */}
+        <div className="mt-2" style={{ width: 40, height: 1.5, background: hexToRgba(accent, 0.35), borderRadius: 2 }} />
+      </div>
+
+      {/* Text content */}
+      <div className="flex flex-col justify-center flex-1 px-7 sm:px-9 pb-6">
+        {slide.keyword && (
+          <p className="text-xs font-bold tracking-wider uppercase mb-2 sm:mb-3" style={{ color: accent }}>
+            {slide.keyword}
+          </p>
+        )}
+        <h2 className="font-black leading-tight mb-2 sm:mb-3"
+          style={{ color: tc, fontSize: 'clamp(1.5rem, 6vw, 2.6rem)', lineHeight: 1.18, whiteSpace: 'pre-line' }}>
+          {slide.headline.replace(/\\n/g, '\n')}
+        </h2>
+        <div className="mb-3 sm:mb-4" style={{ background: accent, width: 40, height: 3, borderRadius: 2 }} />
+        {bodyFormatted && (
+          <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-line" style={{ color: sc }}>
+            {bodyFormatted}
+          </p>
+        )}
+      </div>
+
       <Dots index={index} total={total} accent={accent} />
     </div>
   );
@@ -373,15 +557,26 @@ function StatPreview({ slide, index, total }: { slide: InstagramSlide; index: nu
   const accent = slide.accent_color || '#00c896';
   const tc = getTextColor(bg);
   const sc = secondary(tc);
+  const statEmoji = getStatEmoji(slide.stat_unit);
   return (
     <div className="w-full aspect-square relative flex flex-col p-6 sm:p-8 overflow-hidden" style={{ background: bg }}>
+      {/* Decorative sparkline */}
+      <svg className="absolute bottom-0 left-0 pointer-events-none" style={{ width: '70%', height: '40%', opacity: 0.22 }}
+        viewBox="0 0 300 140" preserveAspectRatio="none">
+        <path d="M10 125 C60 95 110 112 150 98 C190 84 240 62 290 32"
+          stroke={accent} strokeWidth="3" fill="none" strokeLinecap="round" />
+        {([[10, 125], [90, 106], [150, 98], [210, 88], [290, 32]] as [number, number][]).map(([x, y], i) => (
+          <circle key={i} cx={x} cy={y} r="5" fill={accent} />
+        ))}
+      </svg>
+
       {slide.stat_badge && (
-        <span className="self-start text-xs font-bold px-2.5 py-1 rounded mb-auto"
+        <span className="self-start text-xs font-bold px-2.5 py-1 rounded mb-auto relative z-10"
           style={{ background: accent, color: bg }}>
-          {slide.stat_badge}
+          {statEmoji}&nbsp;&nbsp;{slide.stat_badge}
         </span>
       )}
-      <div className="flex-1 flex flex-col justify-center">
+      <div className="flex-1 flex flex-col justify-center relative z-10">
         <div className="flex items-end gap-1 sm:gap-1.5 mb-2 sm:mb-3">
           <span className="font-black leading-none"
             style={{ color: accent, fontSize: 'clamp(3.25rem, 16vw, 6.5rem)' }}>
@@ -400,8 +595,58 @@ function StatPreview({ slide, index, total }: { slide: InstagramSlide; index: nu
         )}
       </div>
       {slide.source && (
-        <p className="text-xs" style={{ color: sc }}>SOURCE · {slide.source}</p>
+        <p className="text-xs relative z-10" style={{ color: sc }}>SOURCE · {slide.source}</p>
       )}
+      <Dots index={index} total={total} accent={accent} />
+    </div>
+  );
+}
+
+function OutroPreview({ slide, index, total }: { slide: InstagramSlide; index: number; total: number }) {
+  const bg = slide.background_color || '#0d0d0d';
+  const accent = slide.accent_color || '#00c896';
+  const tc = getTextColor(bg);
+  const sc = secondary(tc);
+  return (
+    <div className="w-full aspect-square relative flex flex-col items-center justify-center px-7 sm:px-9 overflow-hidden" style={{ background: bg }}>
+      <div className="absolute bottom-0 left-0 pointer-events-none" style={{
+        width: '62%', height: '62%',
+        background: `radial-gradient(circle at 25% 80%, ${hexToRgba(accent, 0.55)} 0%, ${hexToRgba(accent, 0.18)} 45%, transparent 70%)`,
+        filter: 'blur(40px)', zIndex: 0,
+      }} />
+      <div className="absolute top-0 right-0 pointer-events-none" style={{
+        width: '45%', height: '45%',
+        background: `radial-gradient(circle at 75% 20%, ${hexToRgba(accent, 0.28)} 0%, transparent 65%)`,
+        filter: 'blur(30px)', zIndex: 0,
+      }} />
+
+      <div className="absolute top-3 right-4 text-xs" style={{ color: sc, zIndex: 1 }}>{index + 1} / {total}</div>
+
+      <div className="relative text-center flex flex-col items-center" style={{ zIndex: 1 }}>
+        <p className="text-xs font-semibold tracking-widest mb-3" style={{ color: hexToRgba(accent, 0.70) }}>
+          NEWSLETTER
+        </p>
+        <p className="font-bold leading-snug mb-0.5" style={{ color: tc, fontSize: 'clamp(1.1rem, 4.5vw, 1.85rem)' }}>
+          매주 수요일 저녁,
+        </p>
+        <p className="font-black leading-snug mb-4" style={{ color: accent, fontSize: 'clamp(1.35rem, 5.5vw, 2.25rem)' }}>
+          메이커스노트
+        </p>
+        <p className="text-center leading-relaxed mb-3" style={{ color: tc, fontSize: 'clamp(0.78rem, 3vw, 1.05rem)' }}>
+          뉴스레터에서 새로운 이야기를<br />보냅니다 ✉️
+        </p>
+        <p className="text-center" style={{ color: sc, fontSize: 'clamp(0.68rem, 2.5vw, 0.88rem)' }}>
+          프로필 링크 또는 &apos;메이커스노트&apos;를 검색해보세요.
+        </p>
+      </div>
+
+      <p className="absolute bottom-4 text-center pointer-events-none" style={{
+        color: hexToRgba(accent, 0.55),
+        fontSize: 'clamp(0.58rem, 1.8vw, 0.72rem)', zIndex: 1,
+      }}>
+        maily.so/makersnote
+      </p>
+
       <Dots index={index} total={total} accent={accent} />
     </div>
   );
@@ -409,9 +654,10 @@ function StatPreview({ slide, index, total }: { slide: InstagramSlide; index: nu
 
 function SlidePreview({ slide, index, total }: { slide: InstagramSlide; index: number; total: number }) {
   const layout = slide.layout ?? (index === 0 ? 'cover' : 'content');
-  if (layout === 'cover') return <CoverPreview slide={slide} index={index} total={total} />;
-  if (layout === 'stat')  return <StatPreview  slide={slide} index={index} total={total} />;
-  return <ContentPreview slide={slide} index={index} total={total} />;
+  if (layout === 'cover')  return <CoverPreview   slide={slide} index={index} total={total} />;
+  if (layout === 'stat')   return <StatPreview    slide={slide} index={index} total={total} />;
+  if (layout === 'outro')  return <OutroPreview   slide={slide} index={index} total={total} />;
+  return                          <ContentPreview slide={slide} index={index} total={total} />;
 }
 
 /* ─── Main Component ─── */
@@ -419,15 +665,26 @@ function SlidePreview({ slide, index, total }: { slide: InstagramSlide; index: n
 export function InstagramCard({ post }: { post: InstagramPost }) {
   const [current, setCurrent] = useState(0);
   const [copiedCaption, setCopiedCaption] = useState(false);
-  const total = post.slides.length;
-  const slide = post.slides[current];
+
+  const outroSlide: InstagramSlide = {
+    slide_number: post.slides.length + 1,
+    layout: 'outro',
+    headline: '매주 수요일 저녁,\n메이커스노트',
+    body: '뉴스레터에서 새로운 이야기를 보냅니다 ✉️',
+    background_color: '#0d0d0d',
+    accent_color: post.slides[0]?.accent_color || '#00c896',
+  };
+
+  const slides = [...post.slides, outroSlide];
+  const total = slides.length;
+  const slide = slides[current];
 
   function handleDownloadCurrent() {
     triggerDownload(buildCanvas(slide, current, total), `instagram-slide-${current + 1}.png`);
   }
 
   function handleDownloadAll() {
-    post.slides.forEach((s, i) => {
+    slides.forEach((s, i) => {
       setTimeout(() => triggerDownload(buildCanvas(s, i, total), `instagram-slide-${i + 1}.png`), i * 400);
     });
   }
@@ -440,7 +697,6 @@ export function InstagramCard({ post }: { post: InstagramPost }) {
 
   return (
     <div className="rounded-2xl border bg-gradient-to-br from-fuchsia-50 to-white border-fuchsia-200 shadow-sm overflow-hidden">
-      {/* 헤더 */}
       <div className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-4 border-b border-fuchsia-200">
         <span className="text-sm sm:text-base font-bold px-3 py-1 rounded-full bg-fuchsia-100 text-fuchsia-700">
           📸 Instagram
@@ -454,12 +710,10 @@ export function InstagramCard({ post }: { post: InstagramPost }) {
       </div>
 
       <div className="p-4 sm:p-5 space-y-4">
-        {/* 슬라이드 미리보기 */}
         <div className="rounded-xl overflow-hidden shadow-md">
           <SlidePreview slide={slide} index={current} total={total} />
         </div>
 
-        {/* 네비게이션 */}
         <div className="flex items-center justify-between">
           <button
             onClick={() => setCurrent(Math.max(0, current - 1))}
@@ -478,7 +732,6 @@ export function InstagramCard({ post }: { post: InstagramPost }) {
           </button>
         </div>
 
-        {/* 현재 슬라이드 PNG 저장 */}
         <button
           onClick={handleDownloadCurrent}
           className="w-full py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 hover:border-fuchsia-300 hover:text-fuchsia-600 hover:bg-fuchsia-50 transition-all"
@@ -487,7 +740,6 @@ export function InstagramCard({ post }: { post: InstagramPost }) {
         </button>
       </div>
 
-      {/* 본문 캡션 */}
       <div className="px-4 sm:px-5 pb-5 pt-1 border-t border-fuchsia-100">
         <div className="flex items-center justify-between pt-3 mb-2">
           <span className="text-sm font-semibold text-gray-700">본문 캡션</span>
