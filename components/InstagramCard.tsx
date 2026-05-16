@@ -368,15 +368,15 @@ function drawOutro(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: numb
   ctx.fillText('NEWSLETTER', cx, y);
   y += 30 + 44;
 
-  ctx.font = `700 72px ${F}`;
-  ctx.fillStyle = tc;
+  ctx.font = `600 66px ${F}`;
+  ctx.fillStyle = hexToRgba(accent, 0.85);
   ctx.fillText('매주 수요일 저녁,', cx, y);
-  y += 72 + 14;
+  y += 66 + 18;
 
-  ctx.font = `900 90px ${F}`;
-  ctx.fillStyle = accent;
+  ctx.font = `900 106px ${F}`;
+  ctx.fillStyle = '#ffffff';
   ctx.fillText('메이커스노트', cx, y);
-  y += 90 + 46;
+  y += 106 + 46;
 
   ctx.font = `400 48px ${F}`;
   ctx.fillStyle = tc;
@@ -391,9 +391,9 @@ function drawOutro(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: numb
   ctx.fillText("'메이커스노트'를 검색해보세요.", cx, y);
 
   ctx.textBaseline = 'bottom';
-  ctx.font = `300 28px ${F}`;
-  ctx.fillStyle = hexToRgba(accent, 0.55);
-  ctx.fillText('maily.so/makersnote', cx, S - 65);
+  ctx.font = `500 38px ${F}`;
+  ctx.fillStyle = hexToRgba(accent, 0.92);
+  ctx.fillText('maily.so/makersnote', cx, S - 100);
 }
 
 /* ─── Compose full canvas ─── */
@@ -596,10 +596,10 @@ function OutroPreview({ slide, index, total }: { slide: InstagramSlide; index: n
         <p className="text-xs font-semibold tracking-widest mb-3" style={{ color: hexToRgba(accent, 0.70) }}>
           NEWSLETTER
         </p>
-        <p className="font-bold leading-snug mb-0.5" style={{ color: tc, fontSize: 'clamp(1.1rem, 4.5vw, 1.85rem)' }}>
+        <p className="font-semibold leading-snug mb-0.5" style={{ color: hexToRgba(accent, 0.85), fontSize: 'clamp(1rem, 4vw, 1.65rem)' }}>
           매주 수요일 저녁,
         </p>
-        <p className="font-black leading-snug mb-4" style={{ color: accent, fontSize: 'clamp(1.35rem, 5.5vw, 2.25rem)' }}>
+        <p className="font-black leading-snug mb-4" style={{ color: '#ffffff', fontSize: 'clamp(1.5rem, 6vw, 2.5rem)' }}>
           메이커스노트
         </p>
         <p className="text-center leading-relaxed mb-3" style={{ color: tc, fontSize: 'clamp(0.78rem, 3vw, 1.05rem)' }}>
@@ -610,9 +610,11 @@ function OutroPreview({ slide, index, total }: { slide: InstagramSlide; index: n
         </p>
       </div>
 
-      <p className="absolute bottom-4 text-center pointer-events-none" style={{
-        color: hexToRgba(accent, 0.55),
-        fontSize: 'clamp(0.58rem, 1.8vw, 0.72rem)', zIndex: 1,
+      <p className="absolute bottom-6 text-center pointer-events-none" style={{
+        color: hexToRgba(accent, 0.92),
+        fontSize: 'clamp(0.75rem, 2.5vw, 0.95rem)',
+        fontWeight: 500,
+        zIndex: 1,
       }}>
         maily.so/makersnote
       </p>
