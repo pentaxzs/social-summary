@@ -9,6 +9,7 @@ const HEADER_EMOJIS = ['📣', '🚀', '✨', '🌐', '💬'];
 import { ApiKeyInput } from '@/components/ApiKeyInput';
 import { SummaryCard } from '@/components/SummaryCard';
 import { InstagramCard } from '@/components/InstagramCard';
+import { InstagramPhotoCard } from '@/components/InstagramPhotoCard';
 import { summarizeUrl } from '@/app/actions/summarize';
 import {
   Provider,
@@ -333,7 +334,7 @@ export default function Home() {
               ))}
             {submittedPlatforms.has('instagram') && instagramPost && <InstagramCard post={instagramPost} />}
             {submittedPlatforms.has('instagramPhoto') && instagramPhotoPost && (
-              <div>/* InstagramPhotoCard placeholder — replaced in Task 5 */</div>
+              <InstagramPhotoCard post={instagramPhotoPost} />
             )}
           </div>
         )}
