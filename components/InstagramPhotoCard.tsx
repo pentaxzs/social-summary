@@ -1,22 +1,9 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { InstagramPhotoPost, InstagramPhotoSlide, InstagramSlide } from '@/lib/types';
 
-/* ─── Utilities (shared logic) ─── */
-
-function getTextColor(hex: string): '#ffffff' | '#1a1a1a' {
-  const h = (hex || '#000000').replace('#', '');
-  if (h.length < 6) return '#ffffff';
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.55 ? '#1a1a1a' : '#ffffff';
-}
-
-function secondary(tc: string): string {
-  return tc === '#ffffff' ? 'rgba(255,255,255,0.58)' : 'rgba(0,0,0,0.42)';
-}
+/* ─── Utilities ─── */
 
 function hexToRgba(hex: string, alpha: number): string {
   const h = (hex || '#000000').replace('#', '');
@@ -192,7 +179,7 @@ function drawPhotoCover(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S:
   });
 
   // Slide counter (top-right pill)
-  drawSlideCounter(ctx, slide, S);
+
 }
 
 /* ─── Canvas: Photo Content ─── */
@@ -259,7 +246,7 @@ function drawPhotoContent(ctx: CanvasRenderingContext2D, slide: InstagramSlide, 
     bodyLines.forEach((line, i) => ctx.fillText(line, S / 2, y + i * BODY_LH));
   }
 
-  drawSlideCounter(ctx, slide, S);
+
 }
 
 /* ─── Canvas: Photo Stat ─── */
@@ -325,14 +312,10 @@ function drawPhotoStat(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: 
     ctx.fillText(`SOURCE · ${slide.source}`, 80, S - 80);
   }
 
-  drawSlideCounter(ctx, slide, S);
+
 }
 
-/* ─── Slide counter pill ─── */
 
-function drawSlideCounter(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: number) {
-  // Keep as reference — will be drawn by buildPhotoCanvas which knows index/total
-}
 
 /* ─── Outro (reuse text-only style) ─── */
 
