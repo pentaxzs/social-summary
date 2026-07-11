@@ -5,6 +5,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAI } from '@ai-sdk/openai';
 import { extractContent } from '@/lib/extract-content';
+import { assignImagesToSlides } from './image-sources';
 import {
   Provider,
   PROVIDERS,
@@ -12,6 +13,8 @@ import {
   TextPlatform,
   Platform,
   InstagramPost,
+  InstagramPhotoPost,
+  InstagramPhotoSlide,
   SummarizeResponse,
   PLATFORM_LIMITS,
 } from '@/lib/types';
@@ -164,21 +167,27 @@ export async function summarizeUrl(
   url: string,
   provider: Provider,
   apiKey: string,
-  selectedPlatforms: Platform[]
+  selectedPlatforms: Platform[],
+  unsplashKey?: string,
+  openaiImageKey?: string,
 ): Promise<SummarizeResponse> {
   try {
-    const { title, content } = await extractContent(url);
+    const { title, content, images } = await extractContent(url);
     const model = createModel(provider, apiKey);
 
-    const textPlatforms = selectedPlatforms.filter((p): p is TextPlatform => p !== 'instagram');
+    const textPlatforms = selectedPlatforms.filter((p): p is TextPlatform => p !== 'instagram' && p !== 'instagramPhoto');
     const includeInstagram = selectedPlatforms.includes('instagram');
+    const includeInstagramPhoto = selectedPlatforms.includes('instagramPhoto');
 
     // 선택된 플랫폼만 병렬 호출
-    const [textResult, instaResult] = await Promise.allSettled([
+    const [textResult, instaResult, instaPhotoTextResult] = await Promise.allSettled([
       textPlatforms.length > 0
         ? generateText({ model, prompt: SUMMARY_PROMPT(title, content, textPlatforms) })
         : Promise.resolve(null),
       includeInstagram
+        ? generateText({ model, prompt: INSTAGRAM_PROMPT(title, content) })
+        : Promise.resolve(null),
+      includeInstagramPhoto
         ? generateText({ model, prompt: INSTAGRAM_PROMPT(title, content) })
         : Promise.resolve(null),
     ]);
@@ -248,7 +257,42 @@ export async function summarizeUrl(
       }
     }
 
-    return { summaries, instagramPost };
+    // Instagram Photo 파싱 + 이미지 매칭
+    let instagramPhotoPost: InstagramPhotoPost | null = null;
+    if (includeInstagramPhoto) {
+      if (instaPhotoTextResult.status === 'rejected') {
+        if (textPlatforms.length === 0 && !includeInstagram) throw instaPhotoTextResult.reason;
+      } else if (instaPhotoTextResult.status === 'fulfilled' && instaPhotoTextResult.value) {
+        try {
+          const photoMatch = instaPhotoTextResult.value.text.match(/\{[\s\S]*\}/);
+          if (photoMatch) {
+            const parsed = JSON.parse(photoMatch[0]) as InstagramPost;
+            if (parsed.slides && Array.isArray(parsed.slides) && parsed.slides.length > 0) {
+              // Assign images to each slide
+              const imageUrls = await assignImagesToSlides(
+                parsed.slides,
+                images,
+                unsplashKey,
+                openaiImageKey,
+              );
+              const photoSlides: InstagramPhotoSlide[] = parsed.slides.map((slide, i) => ({
+                ...slide,
+                image_url: imageUrls[i] || '',
+              }));
+              instagramPhotoPost = {
+                title: parsed.title,
+                slides: photoSlides,
+                caption: parsed.caption,
+              };
+            }
+          }
+        } catch {
+          // 파싱 실패 시 null 유지
+        }
+      }
+    }
+
+    return { summaries, instagramPost, instagramPhotoPost };
   } catch (err: unknown) {
     const FALLBACK = '알 수 없는 오류가 발생했습니다. 다시 시도해주세요.';
     let message = FALLBACK;
