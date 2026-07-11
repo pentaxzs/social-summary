@@ -15,6 +15,7 @@ import {
   Platform,
   PlatformSummaries,
   InstagramPost,
+  InstagramPhotoPost,
   ALL_PLATFORMS,
   PLATFORM_LABELS_ALL,
 } from '@/lib/types';
@@ -22,6 +23,8 @@ import {
 const LS_PROVIDER = 'ss_provider';
 const LS_API_KEY = 'ss_api_key';
 const LS_HISTORY = 'ss_history';
+const LS_UNSPLASH_KEY = 'ss_unsplash_key';
+const LS_OPENAI_IMAGE_KEY = 'ss_openai_image_key';
 
 const PLATFORM_SELECTED_STYLE: Record<Platform, string> = {
   twitter:   'bg-sky-500   border-sky-500   text-white',
@@ -29,6 +32,7 @@ const PLATFORM_SELECTED_STYLE: Record<Platform, string> = {
   linkedin:  'bg-blue-700  border-blue-700  text-white',
   geekNews:  'bg-pink-500  border-pink-500  text-white',
   instagram: 'bg-fuchsia-600 border-fuchsia-600 text-white',
+  instagramPhoto: 'bg-violet-600 border-violet-600 text-white',
 };
 
 const PLATFORM_HOVER_STYLE: Record<Platform, string> = {
@@ -37,6 +41,7 @@ const PLATFORM_HOVER_STYLE: Record<Platform, string> = {
   linkedin:  'hover:border-blue-400  hover:text-blue-700',
   geekNews:  'hover:border-pink-400  hover:text-pink-600',
   instagram: 'hover:border-fuchsia-400 hover:text-fuchsia-600',
+  instagramPhoto: 'hover:border-violet-400 hover:text-violet-600',
 };
 
 export default function Home() {
@@ -49,6 +54,10 @@ export default function Home() {
   const [toast, setToast] = useState(false);
   const [summaries, setSummaries] = useState<Partial<PlatformSummaries> | null>(null);
   const [instagramPost, setInstagramPost] = useState<InstagramPost | null>(null);
+  const [instagramPhotoPost, setInstagramPhotoPost] = useState<InstagramPhotoPost | null>(null);
+  const [unsplashKey, setUnsplashKey] = useState('');
+  const [openaiImageKey, setOpenaiImageKey] = useState('');
+  const [submittedPlatforms, setSubmittedPlatforms] = useState<Set<Platform>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<string[]>([]);
   const [isPending, startTransition] = useTransition();
@@ -68,6 +77,10 @@ export default function Home() {
     if (savedProvider) setProvider(savedProvider);
     if (savedKey) setApiKey(savedKey);
     if (savedHistory) setHistory(JSON.parse(savedHistory));
+    const savedUnsplashKey = localStorage.getItem(LS_UNSPLASH_KEY);
+    const savedOpenaiImageKey = localStorage.getItem(LS_OPENAI_IMAGE_KEY);
+    if (savedUnsplashKey) setUnsplashKey(savedUnsplashKey);
+    if (savedOpenaiImageKey) setOpenaiImageKey(savedOpenaiImageKey);
   }, []);
 
   function handleProviderChange(p: Provider) {
@@ -78,6 +91,16 @@ export default function Home() {
   function handleApiKeyChange(key: string) {
     setApiKey(key);
     localStorage.setItem(LS_API_KEY, key);
+  }
+
+  function handleUnsplashKeyChange(key: string) {
+    setUnsplashKey(key);
+    localStorage.setItem(LS_UNSPLASH_KEY, key);
+  }
+
+  function handleOpenaiImageKeyChange(key: string) {
+    setOpenaiImageKey(key);
+    localStorage.setItem(LS_OPENAI_IMAGE_KEY, key);
   }
 
   function togglePlatform(platform: Platform) {
@@ -104,10 +127,18 @@ export default function Home() {
     setError(null);
     setSummaries(null);
     setInstagramPost(null);
+    setInstagramPhotoPost(null);
+
+    const platformsSnapshot = new Set(selectedPlatforms);
+    setSubmittedPlatforms(platformsSnapshot);
 
     startTransition(async () => {
       try {
-        const result = await summarizeUrl(url, provider, apiKey, Array.from(selectedPlatforms));
+        const result = await summarizeUrl(
+          url, provider, apiKey, Array.from(platformsSnapshot),
+          unsplashKey || undefined,
+          provider === 'openai' ? apiKey : openaiImageKey || undefined,
+        );
 
         if ('error' in result && result.error) {
           setError(result.error);
@@ -116,6 +147,7 @@ export default function Home() {
 
         setSummaries(result.summaries ?? null);
         setInstagramPost(result.instagramPost ?? null);
+        setInstagramPhotoPost(result.instagramPhotoPost ?? null);
 
         const next = [url, ...history.filter((h) => h !== url)].slice(0, 10);
         setHistory(next);
@@ -131,7 +163,7 @@ export default function Home() {
   }
 
   const canSubmit = !!apiKey && !!url && !isPending && selectedPlatforms.size > 0;
-  const hasResults = (summaries && Object.keys(summaries).length > 0) || instagramPost;
+  const hasResults = (summaries && Object.keys(summaries).length > 0) || instagramPost || instagramPhotoPost;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50">
@@ -224,6 +256,32 @@ export default function Home() {
               </div>
             </div>
 
+            {/* Instagram w/photo 추가 키 */}
+            {selectedPlatforms.has('instagramPhoto') && (
+              <div className="space-y-3 rounded-xl border border-violet-200 bg-violet-50/50 p-4">
+                <p className="text-xs font-medium text-violet-700">🖼️ Instagram w/photo 추가 설정</p>
+                <div className="space-y-2">
+                  <input
+                    type="password"
+                    value={unsplashKey}
+                    onChange={(e) => handleUnsplashKeyChange(e.target.value)}
+                    placeholder="Unsplash Access Key"
+                    className="w-full rounded-lg border border-violet-200 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-transparent"
+                  />
+                  {provider !== 'openai' && (
+                    <input
+                      type="password"
+                      value={openaiImageKey}
+                      onChange={(e) => handleOpenaiImageKeyChange(e.target.value)}
+                      placeholder="OpenAI API Key (이미지 생성용)"
+                      className="w-full rounded-lg border border-violet-200 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-transparent"
+                    />
+                  )}
+                </div>
+                <p className="text-xs text-gray-400">Unsplash/OpenAI 키는 한번 입력하면 자동 저장됩니다</p>
+              </div>
+            )}
+
             <button
               type={canSubmit ? 'submit' : 'button'}
               onClick={!canSubmit ? showToast : undefined}
@@ -269,11 +327,14 @@ export default function Home() {
         {hasResults && (
           <div className="space-y-4">
             {(['twitter', 'thread', 'linkedin', 'geekNews'] as const)
-              .filter((p) => selectedPlatforms.has(p) && summaries?.[p])
+              .filter((p) => submittedPlatforms.has(p) && summaries?.[p])
               .map((platform) => (
                 <SummaryCard key={platform} platform={platform} text={summaries![platform]!} />
               ))}
-            {instagramPost && <InstagramCard post={instagramPost} />}
+            {submittedPlatforms.has('instagram') && instagramPost && <InstagramCard post={instagramPost} />}
+            {submittedPlatforms.has('instagramPhoto') && instagramPhotoPost && (
+              <div>/* InstagramPhotoCard placeholder — replaced in Task 5 */</div>
+            )}
           </div>
         )}
       </main>
