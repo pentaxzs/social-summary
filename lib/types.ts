@@ -40,7 +40,7 @@ export interface PlatformSummaries {
 }
 
 export type TextPlatform = keyof PlatformSummaries;
-export type Platform = TextPlatform | 'instagram';
+export type Platform = TextPlatform | 'instagram' | 'instagramPhoto';
 
 export type InstagramSlideLayout = 'cover' | 'content' | 'stat' | 'outro';
 
@@ -68,19 +68,31 @@ export interface InstagramPost {
   caption: string;
 }
 
+export interface InstagramPhotoSlide extends InstagramSlide {
+  image_url: string;
+}
+
+export interface InstagramPhotoPost {
+  title: string;
+  slides: InstagramPhotoSlide[];
+  caption: string;
+}
+
 export interface SummarizeResult {
   summaries: Partial<PlatformSummaries>;
   instagramPost: InstagramPost | null;
+  instagramPhotoPost: InstagramPhotoPost | null;
   error?: never;
 }
 
 export interface SummarizeError {
   summaries?: never;
   instagramPost?: never;
+  instagramPhotoPost?: never;
   error: string;
 }
 
-export const ALL_PLATFORMS: Platform[] = ['twitter', 'thread', 'linkedin', 'geekNews', 'instagram'];
+export const ALL_PLATFORMS: Platform[] = ['twitter', 'thread', 'linkedin', 'geekNews', 'instagram', 'instagramPhoto'];
 
 export const PLATFORM_LABELS_ALL: Record<Platform, string> = {
   twitter: '𝕏 Twitter',
@@ -88,6 +100,7 @@ export const PLATFORM_LABELS_ALL: Record<Platform, string> = {
   linkedin: '💼 LinkedIn',
   geekNews: '🤓 Geek News',
   instagram: '📸 Instagram',
+  instagramPhoto: '🖼️ Instagram w/photo',
 };
 
 export type SummarizeResponse = SummarizeResult | SummarizeError;
