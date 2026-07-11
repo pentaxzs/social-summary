@@ -3,6 +3,7 @@ import * as cheerio from 'cheerio';
 export interface ExtractResult {
   title: string;
   content: string;
+  images: string[];
 }
 
 function validateUrl(url: string): void {
@@ -53,6 +54,36 @@ export async function extractContent(url: string): Promise<ExtractResult> {
     $('h1').first().text() ||
     '';
 
+  // Extract images before cleanup
+  const baseUrl = new URL(url);
+  const images: string[] = [];
+
+  // og:image first
+  const ogImage = $('meta[property="og:image"]').attr('content');
+  if (ogImage) {
+    try {
+      images.push(new URL(ogImage, baseUrl).href);
+    } catch { /* skip invalid URLs */ }
+  }
+
+  // Article/main body images
+  const imgSelectors = ['article img', 'main img', '.post-content img', '.article-content img', '.entry-content img'];
+  for (const sel of imgSelectors) {
+    $(sel).each((_, el) => {
+      const src = $(el).attr('src') || $(el).attr('data-src');
+      if (!src) return;
+      try {
+        const absUrl = new URL(src, baseUrl).href;
+        // Skip tiny images (icons, trackers), duplicates
+        const width = parseInt($(el).attr('width') || '0', 10);
+        const height = parseInt($(el).attr('height') || '0', 10);
+        if ((width > 0 && width < 100) || (height > 0 && height < 100)) return;
+        if (!images.includes(absUrl)) images.push(absUrl);
+      } catch { /* skip invalid URLs */ }
+    });
+    if (images.length >= 10) break;
+  }
+
   // 불필요한 요소 제거
   $('script, style, nav, header, footer, aside, iframe, noscript').remove();
   $('[class*="nav"], [class*="menu"], [class*="sidebar"], [class*="ad"], [id*="nav"], [id*="sidebar"]').remove();
@@ -91,5 +122,5 @@ export async function extractContent(url: string): Promise<ExtractResult> {
     );
   }
 
-  return { title: title.trim(), content: rawText };
+  return { title: title.trim(), content: rawText, images };
 }
