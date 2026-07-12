@@ -20,15 +20,16 @@ export function ApiKeyInput({
   const config = PROVIDERS[provider];
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 sm:p-5 space-y-4">
+    <div className="border-2 border-neutral-900 p-4 sm:p-5 space-y-4" style={{ background: '#faf6ee' }}>
       <div>
-        <label className="block text-base sm:text-lg font-semibold text-gray-800 mb-2">
-          🤖 AI 제공자
+        <label className="block text-sm font-bold uppercase tracking-wider text-neutral-900 mb-2">
+          ✦ AI 제공자
         </label>
         <select
           value={provider}
           onChange={(e) => onProviderChange(e.target.value as Provider)}
-          className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm sm:text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white transition"
+          className="w-full border-2 border-neutral-900 px-4 py-3 text-sm sm:text-base text-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-2 transition appearance-none cursor-pointer"
+          style={{ background: '#f5f0e8' }}
         >
           {(Object.keys(PROVIDERS) as Provider[]).map((p) => (
             <option key={p} value={p}>
@@ -39,8 +40,8 @@ export function ApiKeyInput({
       </div>
 
       <div>
-        <label className="block text-base sm:text-lg font-semibold text-gray-800 mb-2">
-          🔑 API Key
+        <label className="block text-sm font-bold uppercase tracking-wider text-neutral-900 mb-2">
+          ✦ API Key
         </label>
         <div className="relative">
           <input
@@ -48,24 +49,25 @@ export function ApiKeyInput({
             value={apiKey}
             onChange={(e) => onApiKeyChange(e.target.value)}
             placeholder={config.keyPlaceholder}
-            className="w-full rounded-xl border border-gray-300 px-4 py-3 pr-12 text-sm sm:text-base text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+            className="w-full border-2 border-neutral-900 px-4 py-3 pr-12 text-sm sm:text-base text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-2 transition"
+            style={{ background: '#f5f0e8' }}
           />
           <button
             type="button"
             onClick={() => setVisible((v) => !v)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-lg leading-none p-1"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-900 text-lg leading-none p-1"
             aria-label={visible ? 'API 키 숨기기' : 'API 키 보기'}
           >
             {visible ? '🙈' : '👁️'}
           </button>
         </div>
-        <p className="mt-2 text-xs sm:text-sm text-gray-500">
-          💡 API 키는{' '}
+        <p className="mt-2 text-xs sm:text-sm text-neutral-500">
+          API 키는{' '}
           <a
             href={config.keyHelpUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-indigo-600 underline underline-offset-2 hover:text-indigo-800"
+            className="text-neutral-900 underline underline-offset-2 hover:no-underline font-medium"
           >
             {config.keyHelpLabel}
           </a>

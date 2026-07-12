@@ -66,18 +66,26 @@ export async function extractContent(url: string): Promise<ExtractResult> {
     } catch { /* skip invalid URLs */ }
   }
 
-  // Article/main body images
+  // Article/main body images — filter out avatars, logos, icons
+  const skipClasses = /avatar|profile|author|byline|logo|icon|badge|thumb(nail)?-s/i;
+  const skipUrlPatterns = /gravatar|avatar|logo|icon|favicon|badge|sprite|pixel|tracking/i;
   const imgSelectors = ['article img', 'main img', '.post-content img', '.article-content img', '.entry-content img'];
   for (const sel of imgSelectors) {
     $(sel).each((_, el) => {
       const src = $(el).attr('src') || $(el).attr('data-src');
       if (!src) return;
+      // Skip by class/parent class
+      const cls = $(el).attr('class') || '';
+      const parentCls = $(el).parent().attr('class') || '';
+      if (skipClasses.test(cls) || skipClasses.test(parentCls)) return;
       try {
         const absUrl = new URL(src, baseUrl).href;
-        // Skip tiny images (icons, trackers), duplicates
+        // Skip URLs that look like avatars/icons
+        if (skipUrlPatterns.test(absUrl)) return;
+        // Skip small images — need at least 300px for slide backgrounds
         const width = parseInt($(el).attr('width') || '0', 10);
         const height = parseInt($(el).attr('height') || '0', 10);
-        if ((width > 0 && width < 100) || (height > 0 && height < 100)) return;
+        if ((width > 0 && width < 300) || (height > 0 && height < 300)) return;
         if (!images.includes(absUrl)) images.push(absUrl);
       } catch { /* skip invalid URLs */ }
     });

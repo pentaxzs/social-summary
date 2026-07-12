@@ -145,10 +145,11 @@ function drawPhotoBackground(
   ctx.drawImage(img, (S - w) / 2, (S - h) / 2, w, h);
 }
 
-function drawScrim(ctx: CanvasRenderingContext2D, S: number, opacity = 0.55) {
+
+function drawScrim(ctx: CanvasRenderingContext2D, S: number, opacity = 0.7) {
   const grad = ctx.createLinearGradient(0, 0, 0, S);
-  grad.addColorStop(0, `rgba(0,0,0,${opacity * 0.3})`);
-  grad.addColorStop(0.4, `rgba(0,0,0,${opacity * 0.5})`);
+  grad.addColorStop(0, `rgba(0,0,0,${opacity * 0.4})`);
+  grad.addColorStop(0.4, `rgba(0,0,0,${opacity * 0.65})`);
   grad.addColorStop(1, `rgba(0,0,0,${opacity})`);
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, S, S);
@@ -169,14 +170,20 @@ function drawPhotoCover(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S:
   ctx.font = `900 ${HL}px ${F}`;
   const hlLines = splitLines(ctx, slide.headline, S - PAD * 2, 3);
 
-  // Position from bottom
-  const bottomY = S - 80;
+  // Position: bottom half, ~18% up from bottom edge
+  const bottomY = S - Math.round(S * 0.18);
   const startY = bottomY - (hlLines.length - 1) * HL_LH;
 
+  ctx.shadowColor = 'rgba(0,0,0,0.7)';
+  ctx.shadowBlur = 12;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 2;
   hlLines.forEach((line, i) => {
     ctx.fillStyle = i === hlLines.length - 1 ? accent : '#ffffff';
     ctx.fillText(line, PAD, startY + i * HL_LH);
   });
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
 
   // Slide counter (top-right pill)
 
@@ -413,16 +420,15 @@ async function buildPhotoCanvas(
 
     // Scrim overlay
     if (layout === 'cover') {
-      // Heavier scrim at bottom for cover text
       const grad = ctx.createLinearGradient(0, 0, 0, S);
-      grad.addColorStop(0, 'rgba(0,0,0,0.1)');
-      grad.addColorStop(0.5, 'rgba(0,0,0,0.2)');
-      grad.addColorStop(0.8, 'rgba(0,0,0,0.55)');
-      grad.addColorStop(1, 'rgba(0,0,0,0.75)');
+      grad.addColorStop(0, 'rgba(0,0,0,0.25)');
+      grad.addColorStop(0.35, 'rgba(0,0,0,0.4)');
+      grad.addColorStop(0.6, 'rgba(0,0,0,0.7)');
+      grad.addColorStop(1, 'rgba(0,0,0,0.92)');
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, S, S);
     } else {
-      drawScrim(ctx, S, 0.6);
+      drawScrim(ctx, S, 0.75);
     }
 
     // Draw text overlay
@@ -472,7 +478,7 @@ function PhotoCoverPreview({ slide, index, total }: { slide: InstagramPhotoSlide
   const accent = slide.accent_color || '#7ecef4';
   const hlParts = slide.headline.replace(/\\n/g, '\n').split('\n');
   return (
-    <div className="w-full aspect-square relative flex flex-col justify-end overflow-hidden">
+    <div className="w-full aspect-square relative flex flex-col justify-center overflow-hidden">
       {/* Background image */}
       {slide.image_url && (
         <img src={slide.image_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
@@ -482,20 +488,21 @@ function PhotoCoverPreview({ slide, index, total }: { slide: InstagramPhotoSlide
       )}
       {/* Gradient scrim — heavier at bottom */}
       <div className="absolute inset-0" style={{
-        background: 'linear-gradient(to bottom, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.18) 50%, rgba(0,0,0,0.55) 80%, rgba(0,0,0,0.78) 100%)',
+        background: 'linear-gradient(to bottom, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.4) 35%, rgba(0,0,0,0.7) 60%, rgba(0,0,0,0.92) 100%)',
       }} />
       {/* Counter */}
       <div className="absolute top-3 right-4 text-xs font-medium" style={{ color: 'rgba(255,255,255,0.6)' }}>
         {index + 1}/{total}
       </div>
-      {/* Headline at bottom */}
-      <div className="relative z-10 px-6 sm:px-8 pb-6 sm:pb-8">
+      {/* Headline — vertically centered in bottom half */}
+      <div className="relative z-10 px-6 sm:px-8 mt-auto" style={{ paddingBottom: '18%' }}>
         {hlParts.map((line, i) => (
           <p key={i} className="font-black leading-tight"
             style={{
               color: i === hlParts.length - 1 ? accent : '#ffffff',
               fontSize: 'clamp(1.6rem, 7vw, 3rem)',
               lineHeight: 1.15,
+              textShadow: '0 2px 12px rgba(0,0,0,0.7)',
             }}>
             {line}
           </p>
@@ -519,7 +526,7 @@ function PhotoContentPreview({ slide, index, total }: { slide: InstagramPhotoSli
         <div className="absolute inset-0" style={{ background: slide.background_color || '#1e3a5f' }} />
       )}
       <div className="absolute inset-0" style={{
-        background: 'linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.55) 40%, rgba(0,0,0,0.6) 100%)',
+        background: 'linear-gradient(to bottom, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.65) 40%, rgba(0,0,0,0.75) 100%)',
       }} />
       <div className="absolute top-3 right-4 text-xs font-medium" style={{ color: 'rgba(255,255,255,0.6)' }}>
         {index + 1}/{total}
@@ -561,7 +568,7 @@ function PhotoStatPreview({ slide, index, total }: { slide: InstagramPhotoSlide;
         <div className="absolute inset-0" style={{ background: slide.background_color || '#0a0a0a' }} />
       )}
       <div className="absolute inset-0" style={{
-        background: 'linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.55) 40%, rgba(0,0,0,0.6) 100%)',
+        background: 'linear-gradient(to bottom, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.65) 40%, rgba(0,0,0,0.75) 100%)',
       }} />
       <div className="absolute top-3 right-4 text-xs font-medium" style={{ color: 'rgba(255,255,255,0.6)' }}>
         {index + 1}/{total}
@@ -648,9 +655,19 @@ function PhotoSlidePreview({ slide, index, total }: { slide: InstagramPhotoSlide
 
 /* ─── Main Component ─── */
 
-export function InstagramPhotoCard({ post }: { post: InstagramPhotoPost }) {
+interface InstagramPhotoCardProps {
+  post: InstagramPhotoPost;
+  onImageChange?: (slideIndex: number, newUrl: string) => void;
+  onRegenerateImage?: (slideIndex: number, source: 'unsplash' | 'gpt') => Promise<void>;
+  isRegenerating?: boolean;
+  imageError?: string | null;
+}
+
+export function InstagramPhotoCard({ post, onImageChange, onRegenerateImage, isRegenerating, imageError }: InstagramPhotoCardProps) {
   const [current, setCurrent] = useState(0);
   const [copiedCaption, setCopiedCaption] = useState(false);
+  const [showImageMenu, setShowImageMenu] = useState(false);
+  const [urlInput, setUrlInput] = useState('');
 
   const outroSlide: InstagramPhotoSlide = {
     slide_number: post.slides.length + 1,
@@ -704,6 +721,67 @@ export function InstagramPhotoCard({ post }: { post: InstagramPhotoPost }) {
         <div className="rounded-xl overflow-hidden shadow-md">
           <PhotoSlidePreview slide={slide} index={current} total={total} />
         </div>
+
+        {/* 이미지 교체 — outro 제외 */}
+        {slide.layout !== 'outro' && onRegenerateImage && (
+          <div className="space-y-2">
+            {!showImageMenu ? (
+              <button
+                onClick={() => setShowImageMenu(true)}
+                className="w-full py-2 rounded-xl border border-dashed border-gray-300 text-xs text-gray-400 hover:border-violet-300 hover:text-violet-500 transition-all"
+              >
+                🔄 배경 이미지 교체
+              </button>
+            ) : (
+              <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-3 space-y-2">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { onRegenerateImage(current, 'unsplash'); setShowImageMenu(false); }}
+                    disabled={isRegenerating}
+                    className="flex-1 py-2 rounded-lg bg-white border border-gray-200 text-xs font-medium text-gray-600 hover:border-violet-300 hover:text-violet-600 disabled:opacity-40 transition-all"
+                  >
+                    📷 Unsplash
+                  </button>
+                  <button
+                    onClick={() => { onRegenerateImage(current, 'gpt'); setShowImageMenu(false); }}
+                    disabled={isRegenerating}
+                    className="flex-1 py-2 rounded-lg bg-white border border-gray-200 text-xs font-medium text-gray-600 hover:border-violet-300 hover:text-violet-600 disabled:opacity-40 transition-all"
+                  >
+                    🤖 GPT 생성
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={urlInput}
+                    onChange={(e) => setUrlInput(e.target.value)}
+                    placeholder="이미지 URL 직접 입력"
+                    className="flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-400"
+                  />
+                  <button
+                    onClick={() => { if (urlInput && onImageChange) { onImageChange(current, urlInput); setUrlInput(''); setShowImageMenu(false); } }}
+                    disabled={!urlInput}
+                    className="px-3 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-medium disabled:opacity-40 hover:bg-violet-700 transition-all"
+                  >
+                    적용
+                  </button>
+                </div>
+                <button
+                  onClick={() => setShowImageMenu(false)}
+                  className="w-full text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  닫기
+                </button>
+              </div>
+            )}
+            {isRegenerating && (
+              <p className="text-xs text-violet-500 text-center animate-pulse">이미지 생성 중...</p>
+            )}
+            {imageError && !isRegenerating && (
+              <p className="text-xs text-red-500 text-center">⚠️ {imageError}</p>
+            )}
+          </div>
+        )}
 
         <div className="flex items-center justify-between">
           <button
