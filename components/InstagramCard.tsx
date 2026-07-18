@@ -715,7 +715,7 @@ export function InstagramCard({ post }: { post: InstagramPost }) {
             {copiedCaption ? '✅ 복사됨!' : '📋 복사'}
           </button>
         </div>
-        <p className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed bg-gray-50 rounded-xl p-3">
+        <p className="text-sm text-gray-600 whitespace-pre-wrap break-words leading-relaxed bg-gray-50 rounded-xl p-3">
           {post.caption}
         </p>
         <p className="text-xs text-gray-400 text-right mt-1 tabular-nums">{post.caption.length}자</p>

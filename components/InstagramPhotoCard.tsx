@@ -655,9 +655,20 @@ function PhotoSlidePreview({ slide, index, total }: { slide: InstagramPhotoSlide
 
 /* ─── Main Component ─── */
 
+const SOLID_PRESETS = [
+  { color: '#1e3a5f', label: '네이비' },
+  { color: '#0d0d0d', label: '블랙' },
+  { color: '#2d3436', label: '차콜' },
+  { color: '#1a472a', label: '그린' },
+  { color: '#4a1942', label: '퍼플' },
+  { color: '#8b4513', label: '브라운' },
+  { color: '#2c3e50', label: '슬레이트' },
+  { color: '#c0392b', label: '레드' },
+];
+
 interface InstagramPhotoCardProps {
   post: InstagramPhotoPost;
-  onImageChange?: (slideIndex: number, newUrl: string) => void;
+  onImageChange?: (slideIndex: number, newUrl: string, bgColor?: string) => void;
   onRegenerateImage?: (slideIndex: number, source: 'unsplash' | 'gpt') => Promise<void>;
   isRegenerating?: boolean;
   imageError?: string | null;
@@ -667,6 +678,7 @@ export function InstagramPhotoCard({ post, onImageChange, onRegenerateImage, isR
   const [current, setCurrent] = useState(0);
   const [copiedCaption, setCopiedCaption] = useState(false);
   const [showImageMenu, setShowImageMenu] = useState(false);
+  const [showColorPicker, setShowColorPicker] = useState(false);
   const [urlInput, setUrlInput] = useState('');
 
   const outroSlide: InstagramPhotoSlide = {
@@ -749,7 +761,26 @@ export function InstagramPhotoCard({ post, onImageChange, onRegenerateImage, isR
                   >
                     🤖 GPT 생성
                   </button>
+                  <button
+                    onClick={() => setShowColorPicker(!showColorPicker)}
+                    className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-all ${showColorPicker ? 'bg-violet-100 border-violet-300 text-violet-700' : 'bg-white border-gray-200 text-gray-600 hover:border-violet-300 hover:text-violet-600'}`}
+                  >
+                    🎨 단색 배경
+                  </button>
                 </div>
+                {showColorPicker && (
+                  <div className="flex gap-1.5 flex-wrap">
+                    {SOLID_PRESETS.map((p) => (
+                      <button
+                        key={p.color}
+                        onClick={() => { if (onImageChange) { onImageChange(current, '', p.color); } setShowImageMenu(false); setShowColorPicker(false); }}
+                        className="w-8 h-8 rounded-lg border-2 border-white shadow-sm hover:scale-110 hover:border-violet-400 transition-all"
+                        style={{ background: p.color }}
+                        title={p.label}
+                      />
+                    ))}
+                  </div>
+                )}
                 <div className="flex gap-2">
                   <input
                     type="url"
@@ -819,7 +850,7 @@ export function InstagramPhotoCard({ post, onImageChange, onRegenerateImage, isR
             {copiedCaption ? '✅ 복사됨!' : '📋 복사'}
           </button>
         </div>
-        <p className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed bg-gray-50 rounded-xl p-3">
+        <p className="text-sm text-gray-600 whitespace-pre-wrap break-words leading-relaxed bg-gray-50 rounded-xl p-3">
           {post.caption}
         </p>
         <p className="text-xs text-gray-400 text-right mt-1 tabular-nums">{post.caption.length}자</p>

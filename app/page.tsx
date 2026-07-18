@@ -115,10 +115,10 @@ export default function Home() {
     });
   }
 
-  function handleSlideImageChange(slideIndex: number, newUrl: string) {
+  function handleSlideImageChange(slideIndex: number, newUrl: string, bgColor?: string) {
     if (!instagramPhotoPost) return;
     const updated = { ...instagramPhotoPost, slides: instagramPhotoPost.slides.map((s, i) =>
-      i === slideIndex ? { ...s, image_url: newUrl } : s
+      i === slideIndex ? { ...s, image_url: newUrl, ...(bgColor ? { background_color: bgColor } : {}) } : s
     )};
     setInstagramPhotoPost(updated);
   }
@@ -205,8 +205,8 @@ export default function Home() {
   const hasResults = (summaries && Object.keys(summaries).length > 0) || instagramPost || instagramPhotoPost;
 
   return (
-    <div className="min-h-screen" style={{ background: '#f5f0e8' }}>
-      <main className="max-w-2xl mx-auto px-4 sm:px-6 py-10 sm:py-14 space-y-6">
+    <div className="min-h-screen overflow-x-hidden" style={{ background: '#f5f0e8' }}>
+      <main className="max-w-2xl mx-auto px-4 sm:px-6 py-10 sm:py-14 space-y-6 overflow-hidden">
 
         {/* 헤더 */}
         <div className="text-center space-y-3 pt-2">
@@ -341,7 +341,7 @@ export default function Home() {
 
         {/* 토스트 */}
         <div
-          className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 border-2 border-neutral-900 bg-neutral-900 text-amber-50 text-sm font-bold shadow-lg transition-all duration-300 whitespace-nowrap ${
+          className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 border-2 border-neutral-900 bg-neutral-900 text-amber-50 text-sm font-bold shadow-lg transition-all duration-300 max-w-[90vw] text-center ${
             toast ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3 pointer-events-none'
           }`}
         >
@@ -363,9 +363,9 @@ export default function Home() {
 
         {/* 에러 */}
         {error && (
-          <div className="border-2 border-neutral-900 px-4 py-4 text-sm sm:text-base text-neutral-900 flex gap-2" style={{ background: '#faf6ee' }}>
-            <span>⚠</span>
-            <span>{error}</span>
+          <div className="border-2 border-neutral-900 px-4 py-4 text-sm sm:text-base text-neutral-900 flex gap-2 min-w-0" style={{ background: '#faf6ee' }}>
+            <span className="shrink-0">⚠</span>
+            <span className="break-words min-w-0">{error}</span>
           </div>
         )}
 

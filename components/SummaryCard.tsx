@@ -52,7 +52,7 @@ export function SummaryCard({ platform, text }: SummaryCardProps) {
       </div>
 
       {/* 요약 텍스트 */}
-      <p className="px-4 sm:px-5 py-4 text-sm sm:text-base text-neutral-800 whitespace-pre-wrap leading-relaxed">
+      <p className="px-4 sm:px-5 py-4 text-sm sm:text-base text-neutral-800 whitespace-pre-wrap break-words leading-relaxed">
         {text}
       </p>
 
