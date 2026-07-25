@@ -787,7 +787,7 @@ export function InstagramPhotoCard({ post, onImageChange, onRegenerateImage, isR
                     value={urlInput}
                     onChange={(e) => setUrlInput(e.target.value)}
                     placeholder="이미지 URL 직접 입력"
-                    className="flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-400"
+                    className="flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-base text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-400"
                   />
                   <button
                     onClick={() => { if (urlInput && onImageChange) { onImageChange(current, urlInput); setUrlInput(''); setShowImageMenu(false); } }}

@@ -241,7 +241,7 @@ export default function Home() {
               onChange={(e) => setUrl(e.target.value)}
               placeholder="https://example.com/article"
               required
-              className="w-full border-2 border-neutral-900 px-4 py-3 text-sm sm:text-base text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-2 transition"
+              className="w-full border-2 border-neutral-900 px-4 py-3 text-base text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-2 transition"
               style={{ background: '#f5f0e8' }}
             />
 
@@ -310,7 +310,7 @@ export default function Home() {
                     value={unsplashKey}
                     onChange={(e) => handleUnsplashKeyChange(e.target.value)}
                     placeholder="Unsplash Access Key"
-                    className="w-full border border-neutral-400 px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-1"
+                    className="w-full border border-neutral-400 px-3 py-2 text-base text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-1"
                     style={{ background: '#faf6ee' }}
                   />
                   {provider !== 'openai' && (
@@ -319,7 +319,7 @@ export default function Home() {
                       value={openaiImageKey}
                       onChange={(e) => handleOpenaiImageKeyChange(e.target.value)}
                       placeholder="OpenAI API Key (이미지 생성용)"
-                      className="w-full border border-neutral-400 px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-1"
+                      className="w-full border border-neutral-400 px-3 py-2 text-base text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-1"
                       style={{ background: '#faf6ee' }}
                     />
                   )}

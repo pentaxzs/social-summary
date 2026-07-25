@@ -28,7 +28,7 @@ export function ApiKeyInput({
         <select
           value={provider}
           onChange={(e) => onProviderChange(e.target.value as Provider)}
-          className="w-full border-2 border-neutral-900 px-4 py-3 text-sm sm:text-base text-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-2 transition appearance-none cursor-pointer"
+          className="w-full border-2 border-neutral-900 px-4 py-3 text-base text-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-2 transition appearance-none cursor-pointer"
           style={{ background: '#f5f0e8' }}
         >
           {(Object.keys(PROVIDERS) as Provider[]).map((p) => (
@@ -49,7 +49,7 @@ export function ApiKeyInput({
             value={apiKey}
             onChange={(e) => onApiKeyChange(e.target.value)}
             placeholder={config.keyPlaceholder}
-            className="w-full border-2 border-neutral-900 px-4 py-3 pr-12 text-sm sm:text-base text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-2 transition"
+            className="w-full border-2 border-neutral-900 px-4 py-3 pr-12 text-base text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-2 transition"
             style={{ background: '#f5f0e8' }}
           />
           <button
