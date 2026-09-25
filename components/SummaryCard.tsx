@@ -70,7 +70,7 @@ export function SummaryCard({
   }
 
   const actionClass =
-    'text-[10px] font-bold uppercase tracking-[0.18em] underline underline-offset-4 ' +
+    'text-[11px] font-bold uppercase tracking-[0.12em] underline underline-offset-4 ' +
     'hover:no-underline disabled:opacity-35 disabled:cursor-not-allowed transition';
 
   return (
@@ -82,7 +82,7 @@ export function SummaryCard({
         </h3>
         <span className="flex-1 h-0.5 opacity-30 min-w-4" style={{ background: meta.color }} />
         <span
-          className={`text-[10px] tracking-wider tabular-nums shrink-0 ${
+          className={`text-[11px] tracking-wider tabular-nums shrink-0 ${
             over ? 'font-bold text-[#8a2a12]' : 'text-[var(--soft)]'
           }`}
         >
@@ -93,7 +93,7 @@ export function SummaryCard({
       {/* 본문 — 플랫폼 색 세로 괘선 */}
       <div className="pl-3.5 border-l-[3px] min-w-0" style={{ borderColor: meta.color }}>
         <p
-          className={`text-sm sm:text-[15px] leading-[1.8] whitespace-pre-wrap break-words transition-opacity ${
+          className={`text-[15px] leading-[1.8] whitespace-pre-wrap break-words transition-opacity ${
             busy ? 'opacity-40' : ''
           }`}
         >

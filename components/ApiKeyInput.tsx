@@ -73,7 +73,7 @@ export function ApiKeyInput({
           </div>
 
           <div>
-            <label htmlFor="ai-api-key" className="np-label block mb-2">
+            <label htmlFor="ai-api-key" className="np-label np-label-latin block mb-2">
               API Key
             </label>
             <div className="relative">

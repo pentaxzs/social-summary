@@ -41,12 +41,21 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* 신문 라벨: 작은 대문자 + 넓은 자간 */
+/*
+ * 신문 라벨. 영문 대문자는 넓은 자간이 어울리지만 한글은 음절 블록이라
+ * 벌릴수록 흩어져 실제보다 작아 보인다. 한글이 섞이는 라벨이라 자간을
+ * 좁게 잡는다. uppercase 는 URL/API 같은 영문 조각에만 걸린다.
+ */
 .np-label {
-  font-size: 10px;
-  letter-spacing: 0.24em;
+  font-size: 11px;
+  letter-spacing: 0.13em;
   text-transform: uppercase;
   color: var(--soft);
+}
+
+/* 순수 영문 라벨은 넓은 자간이 신문처럼 읽힌다 */
+.np-label-latin {
+  letter-spacing: 0.24em;
 }
 
 /* 결과 생성 중 스켈레톤 */

@@ -40,7 +40,7 @@ function FailedCard({ platform }: { platform: Platform }) {
         </span>
         <span className="flex-1 h-0.5 opacity-30 min-w-4" style={{ background: meta.color }} />
       </div>
-      <p className="pl-3.5 border-l-[3px] text-sm text-[var(--soft)]" style={{ borderColor: meta.color }}>
+      <p className="pl-3.5 border-l-[3px] text-[15px] text-[var(--soft)]" style={{ borderColor: meta.color }}>
         이 플랫폼은 만들지 못했습니다. 다시 생성해보세요.
       </p>
     </div>
@@ -347,7 +347,7 @@ export default function Home() {
                 }`}
               >
                 <span
-                  className="block text-[9px] tracking-[0.2em] mb-1.5"
+                  className="block text-[10px] tracking-[0.2em] mb-1.5"
                   style={{ color: isSelected ? meta.color : 'var(--faint)' }}
                 >
                   {meta.no}
@@ -403,7 +403,7 @@ export default function Home() {
           type={canSubmit ? 'submit' : 'button'}
           onClick={!canSubmit ? showToast : undefined}
           disabled={isPending}
-          className="w-full mt-5 border-2 border-[var(--ink)] bg-[var(--ink)] text-[var(--card)] py-3.5 text-xs font-bold uppercase tracking-[0.3em] hover:bg-transparent hover:text-[var(--ink)] active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+          className="w-full mt-5 border-2 border-[var(--ink)] bg-[var(--ink)] text-[var(--card)] py-3.5 text-[13px] font-bold uppercase tracking-[0.2em] hover:bg-transparent hover:text-[var(--ink)] active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
         >
           {isPending ? '만드는 중…' : '요약 생성하기'}
         </button>
