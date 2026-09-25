@@ -1,22 +1,31 @@
 @import "tailwindcss";
 
+/*
+ * 신문 지면 팔레트. 단일 테마로 의도적으로 고정한다 —
+ * 크림 용지 위 검정 잉크가 이 제품의 정체성이라 다크 모드로 뒤집지 않는다.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --paper: #efe9dd;        /* 지면 바탕 */
+  --card: #f7f2e7;         /* 선택된 칸, 살짝 밝은 종이 */
+  --ink: #14120e;          /* 본문 잉크 */
+  --soft: #5f584a;         /* 부제, 캡션 */
+  --faint: #b0a68f;        /* 플레이스홀더, 비활성 */
+  --hair: #c9bfa9;         /* 얇은 괘선 */
+  --skeleton: #ddd3bd;
+
+  --background: var(--paper);
+  --foreground: var(--ink);
 }
 
 @theme inline {
+  --color-paper: var(--paper);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-soft: var(--soft);
+  --color-faint: var(--faint);
+  --color-hair: var(--hair);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 html,
@@ -25,7 +34,30 @@ body {
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "Helvetica Neue", -apple-system, BlinkMacSystemFont,
+    "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 신문 라벨: 작은 대문자 + 넓은 자간 */
+.np-label {
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--soft);
+}
+
+/* 결과 생성 중 스켈레톤 */
+@keyframes np-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.np-pulse {
+  animation: np-pulse 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .np-pulse { animation: none; }
 }

@@ -3,18 +3,22 @@
 import { useState, useEffect, useRef, useTransition } from 'react';
 import { ApiKeyInput } from '@/components/ApiKeyInput';
 import { SummaryCard } from '@/components/SummaryCard';
+import { SummarySkeleton } from '@/components/SummarySkeleton';
 import { InstagramCard } from '@/components/InstagramCard';
 import { InstagramPhotoCard } from '@/components/InstagramPhotoCard';
-import { summarizeUrl } from '@/app/actions/summarize';
+import { summarizeUrl, regenerateSummary } from '@/app/actions/summarize';
 import { regenerateSlideImage } from '@/app/actions/image-sources';
 import {
   Provider,
   Platform,
+  TextPlatform,
   PlatformSummaries,
   InstagramPost,
   InstagramPhotoPost,
+  SourceDoc,
+  RegenerateMode,
   ALL_PLATFORMS,
-  PLATFORM_LABELS_ALL,
+  PLATFORM_META,
 } from '@/lib/types';
 
 const LS_PROVIDER = 'ss_provider';
@@ -23,23 +27,25 @@ const LS_HISTORY = 'ss_history';
 const LS_UNSPLASH_KEY = 'ss_unsplash_key';
 const LS_OPENAI_IMAGE_KEY = 'ss_openai_image_key';
 
-const PLATFORM_SELECTED_STYLE: Record<Platform, string> = {
-  twitter:   'bg-neutral-900 border-neutral-900 text-amber-50',
-  thread:    'bg-neutral-900 border-neutral-900 text-amber-50',
-  linkedin:  'bg-neutral-900 border-neutral-900 text-amber-50',
-  geekNews:  'bg-neutral-900 border-neutral-900 text-amber-50',
-  instagram: 'bg-neutral-900 border-neutral-900 text-amber-50',
-  instagramPhoto: 'bg-neutral-900 border-neutral-900 text-amber-50',
-};
+const TEXT_PLATFORMS: TextPlatform[] = ['twitter', 'thread', 'linkedin', 'geekNews'];
 
-const PLATFORM_HOVER_STYLE: Record<Platform, string> = {
-  twitter:   'hover:border-neutral-600 hover:text-neutral-900',
-  thread:    'hover:border-neutral-600 hover:text-neutral-900',
-  linkedin:  'hover:border-neutral-600 hover:text-neutral-900',
-  geekNews:  'hover:border-neutral-600 hover:text-neutral-900',
-  instagram: 'hover:border-neutral-600 hover:text-neutral-900',
-  instagramPhoto: 'hover:border-neutral-600 hover:text-neutral-900',
-};
+/** 요청은 끝났는데 결과가 없는 플랫폼. 조용히 사라지지 않고 왜 비었는지 알린다 */
+function FailedCard({ platform }: { platform: Platform }) {
+  const meta = PLATFORM_META[platform];
+  return (
+    <div className="pb-5 border-b border-[var(--hair)]">
+      <div className="flex items-baseline gap-2.5 mb-3">
+        <span className="text-[11px] font-extrabold uppercase tracking-[0.2em] shrink-0" style={{ color: meta.color }}>
+          {meta.no} · {meta.label}
+        </span>
+        <span className="flex-1 h-0.5 opacity-30 min-w-4" style={{ background: meta.color }} />
+      </div>
+      <p className="pl-3.5 border-l-[3px] text-sm text-[var(--soft)]" style={{ borderColor: meta.color }}>
+        이 플랫폼은 만들지 못했습니다. 다시 생성해보세요.
+      </p>
+    </div>
+  );
+}
 
 export default function Home() {
   const [provider, setProvider] = useState<Provider>('anthropic');
@@ -56,28 +62,54 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<string[]>([]);
   const [isPending, startTransition] = useTransition();
-  const loadingRef = useRef<HTMLDivElement>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
   const [isRegeneratingImage, setIsRegeneratingImage] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
 
+  // 카드 단위 재생성 상태
+  const [source, setSource] = useState<SourceDoc | null>(null);
+  const [sourceUrl, setSourceUrl] = useState('');
+  const [previous, setPrevious] = useState<Partial<PlatformSummaries>>({});
+  const [busyPlatform, setBusyPlatform] = useState<TextPlatform | null>(null);
+  const [cardError, setCardError] = useState<Partial<Record<TextPlatform, string>>>({});
+
   useEffect(() => {
-    if (isPending && loadingRef.current) {
-      loadingRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (isPending && resultsRef.current) {
+      resultsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }, [isPending]);
 
+  // localStorage 는 서버에 없으므로 복원은 마운트 이후여야 한다. 초기값으로
+  // 당겨오면 서버/클라이언트 첫 렌더가 갈려 하이드레이션 불일치가 생긴다.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    const savedProvider = localStorage.getItem(LS_PROVIDER) as Provider | null;
-    const savedKey = localStorage.getItem(LS_API_KEY);
-    const savedHistory = localStorage.getItem(LS_HISTORY);
+    const read = (k: string) => {
+      try {
+        return localStorage.getItem(k);
+      } catch {
+        return null; // 프라이빗 모드 등에서 접근이 막힐 수 있다
+      }
+    };
+    const savedProvider = read(LS_PROVIDER) as Provider | null;
+    const savedKey = read(LS_API_KEY);
+    const savedHistory = read(LS_HISTORY);
+    const savedUnsplashKey = read(LS_UNSPLASH_KEY);
+    const savedOpenaiImageKey = read(LS_OPENAI_IMAGE_KEY);
+
     if (savedProvider) setProvider(savedProvider);
     if (savedKey) setApiKey(savedKey);
-    if (savedHistory) setHistory(JSON.parse(savedHistory));
-    const savedUnsplashKey = localStorage.getItem(LS_UNSPLASH_KEY);
-    const savedOpenaiImageKey = localStorage.getItem(LS_OPENAI_IMAGE_KEY);
+    if (savedHistory) {
+      try {
+        const parsed = JSON.parse(savedHistory);
+        if (Array.isArray(parsed)) setHistory(parsed);
+      } catch {
+        /* 깨진 기록은 버린다 */
+      }
+    }
     if (savedUnsplashKey) setUnsplashKey(savedUnsplashKey);
     if (savedOpenaiImageKey) setOpenaiImageKey(savedOpenaiImageKey);
   }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   function handleProviderChange(p: Provider) {
     setProvider(p);
@@ -119,35 +151,62 @@ export default function Home() {
     setInstagramPhotoPost(updated);
   }
 
-  async function handleRegenerateImage(slideIndex: number, source: 'unsplash' | 'gpt') {
+  async function handleRegenerateImage(slideIndex: number, imageSource: 'unsplash' | 'gpt') {
     if (!instagramPhotoPost) return;
     const slide = instagramPhotoPost.slides[slideIndex];
     if (!slide) return;
 
-    console.log(`[ImageReplace] slide=${slideIndex}, source=${source}, headline="${slide.headline}"`);
     setIsRegeneratingImage(true);
     setImageError(null);
     try {
       const effectiveOpenaiKey = provider === 'openai' ? apiKey : openaiImageKey;
-      console.log(`[ImageReplace] unsplashKey=${unsplashKey ? 'SET' : 'EMPTY'}, openaiKey=${effectiveOpenaiKey ? 'SET' : 'EMPTY'}`);
       const result = await regenerateSlideImage(
-        source, slide.headline, slide.keyword,
+        imageSource, slide.headline, slide.keyword,
         unsplashKey || undefined,
         effectiveOpenaiKey || undefined,
         slide.image_url || undefined,
       );
-      console.log(`[ImageReplace] result: url=${result.url ? 'OK' : 'NULL'}, error=${result.error || 'none'}`);
       if (result.url) {
         handleSlideImageChange(slideIndex, result.url);
       } else {
         setImageError(result.error || '이미지를 가져오지 못했습니다');
       }
-    } catch (err) {
-      console.error('[ImageReplace] Error:', err);
+    } catch {
       setImageError('이미지 생성 중 오류가 발생했습니다');
     } finally {
       setIsRegeneratingImage(false);
     }
+  }
+
+  /** 카드 하나만 다시 만든다. 원문은 첫 생성 때 받아둔 걸 재사용한다 */
+  async function handleCardRegenerate(platform: TextPlatform, mode: RegenerateMode) {
+    if (!source || !apiKey || busyPlatform) return;
+    const current = summaries?.[platform];
+    if (!current) return;
+
+    setBusyPlatform(platform);
+    setCardError((prev) => ({ ...prev, [platform]: undefined }));
+    try {
+      const result = await regenerateSummary(platform, mode, source, sourceUrl, provider, apiKey);
+      if (result.error || !result.text) {
+        setCardError((prev) => ({ ...prev, [platform]: result.error || '다시 만들지 못했습니다' }));
+        return;
+      }
+      setPrevious((prev) => ({ ...prev, [platform]: current }));
+      setSummaries((prev) => ({ ...prev, [platform]: result.text }));
+    } catch {
+      setCardError((prev) => ({ ...prev, [platform]: '다시 만드는 중 오류가 발생했습니다' }));
+    } finally {
+      setBusyPlatform(null);
+    }
+  }
+
+  function handleCardUndo(platform: TextPlatform) {
+    const prevText = previous[platform];
+    if (!prevText) return;
+    setSummaries((prev) => ({ ...prev, [platform]: prevText }));
+    setPrevious((prev) => ({ ...prev, [platform]: undefined }));
+    setCardError((prev) => ({ ...prev, [platform]: undefined }));
   }
 
   function showToast() {
@@ -163,14 +222,18 @@ export default function Home() {
     setSummaries(null);
     setInstagramPost(null);
     setInstagramPhotoPost(null);
+    setPrevious({});
+    setCardError({});
+    setSource(null);
 
     const platformsSnapshot = new Set(selectedPlatforms);
     setSubmittedPlatforms(platformsSnapshot);
+    const submittedUrl = url;
 
     startTransition(async () => {
       try {
         const result = await summarizeUrl(
-          url, provider, apiKey, Array.from(platformsSnapshot),
+          submittedUrl, provider, apiKey, Array.from(platformsSnapshot),
           unsplashKey || undefined,
           provider === 'openai' ? apiKey : openaiImageKey || undefined,
         );
@@ -183,8 +246,10 @@ export default function Home() {
         setSummaries(result.summaries ?? null);
         setInstagramPost(result.instagramPost ?? null);
         setInstagramPhotoPost(result.instagramPhotoPost ?? null);
+        setSource(result.source ?? null);
+        setSourceUrl(submittedUrl);
 
-        const next = [url, ...history.filter((h) => h !== url)].slice(0, 10);
+        const next = [submittedUrl, ...history.filter((h) => h !== submittedUrl)].slice(0, 10);
         setHistory(next);
         localStorage.setItem(LS_HISTORY, JSON.stringify(next));
       } catch (e) {
@@ -199,193 +264,223 @@ export default function Home() {
 
   const canSubmit = !!apiKey && !!url && !isPending && selectedPlatforms.size > 0;
   const hasResults = (summaries && Object.keys(summaries).length > 0) || instagramPost || instagramPhotoPost;
+  const resultCount = submittedPlatforms.size;
 
   return (
-    <div className="min-h-screen overflow-x-hidden" style={{ background: '#f5f0e8' }}>
-      <main className="max-w-2xl mx-auto px-4 sm:px-6 py-10 sm:py-14 space-y-6 overflow-hidden">
+    <main className="max-w-[700px] mx-auto px-4 pt-6 pb-20">
 
-        {/* 헤더 */}
-        <div className="text-center space-y-3 pt-2">
-          <img
-            src="/social-summary-title.png"
-            alt="Social Summary"
-            className="mx-auto w-[280px] sm:w-[360px]"
-            draggable={false}
-          />
-          <p className="text-neutral-500 text-xs sm:text-sm uppercase tracking-[0.2em]">
-            URL을 입력하면 SNS 요약문을 자동으로 생성합니다
-          </p>
-        </div>
+      {/* 제호 */}
+      <header className="border-t-[5px] border-b border-[var(--ink)] pt-4 pb-2.5 text-center">
+        <h1 className="text-[34px] sm:text-[46px] font-black tracking-[-0.5px] leading-[0.95]">
+          SOCIAL SUMMARY
+        </h1>
+        <p className="np-label mt-3">URL을 입력하면 SNS 요약문을 자동으로 생성합니다</p>
+      </header>
 
-        {/* AI 설정 */}
-        <ApiKeyInput
-          provider={provider}
-          apiKey={apiKey}
-          onProviderChange={handleProviderChange}
-          onApiKeyChange={handleApiKeyChange}
+      <ApiKeyInput
+        provider={provider}
+        apiKey={apiKey}
+        onProviderChange={handleProviderChange}
+        onApiKeyChange={handleApiKeyChange}
+      />
+
+      {/* 입력 */}
+      <form onSubmit={handleSubmit} className="mt-5">
+        <label htmlFor="article-url" className="np-label block border-b-2 border-[var(--ink)] pb-1.5 mb-3">
+          요약할 글 주소
+        </label>
+        <input
+          id="article-url"
+          type="url"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="https://example.com/article"
+          required
+          className="w-full border-0 border-b-2 border-[var(--ink)] bg-transparent pt-2 pb-3 px-0.5 text-lg sm:text-[21px] tracking-[-0.2px] placeholder:text-[var(--faint)] focus:outline-none focus:border-b-[3px]"
         />
 
-        {/* URL 입력 폼 */}
-        <div className="border-2 border-neutral-900 p-4 sm:p-5 space-y-4" style={{ background: '#faf6ee' }}>
-          <label className="block text-sm font-bold uppercase tracking-wider text-neutral-900">
-            ★ URL
-          </label>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <input
-              type="url"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://example.com/article"
-              required
-              className="w-full border-2 border-neutral-900 px-4 py-3 text-base text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-2 transition"
-              style={{ background: '#f5f0e8' }}
-            />
+        {history.length > 0 && (
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
+            {history.slice(0, 4).map((h) => (
+              <button
+                key={h}
+                type="button"
+                onClick={() => setUrl(h)}
+                className="text-[11px] text-[var(--soft)] underline underline-offset-2 hover:text-[var(--ink)] truncate max-w-[210px]"
+              >
+                {h}
+              </button>
+            ))}
+          </div>
+        )}
 
-            {history.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {history.slice(0, 5).map((h) => (
-                  <button
-                    key={h}
-                    type="button"
-                    onClick={() => setUrl(h)}
-                    className="text-xs px-3 py-1.5 border border-neutral-400 text-neutral-600 hover:bg-neutral-900 hover:text-amber-50 truncate max-w-[200px] transition-colors"
-                  >
-                    {h}
-                  </button>
-                ))}
-              </div>
-            )}
+        {/* 플랫폼 = 지면 섹션 */}
+        <div className="flex items-baseline justify-between border-b-2 border-[var(--ink)] pb-1.5 mt-6 mb-2.5">
+          <span className="np-label">생성할 플랫폼</span>
+          <button
+            type="button"
+            onClick={() =>
+              setSelectedPlatforms(
+                selectedPlatforms.size === ALL_PLATFORMS.length
+                  ? new Set<Platform>()
+                  : new Set(ALL_PLATFORMS)
+              )
+            }
+            className="np-label underline underline-offset-[3px] hover:text-[var(--ink)]"
+          >
+            {selectedPlatforms.size === ALL_PLATFORMS.length ? '전체 해제' : '전체 선택'}
+          </button>
+        </div>
 
-            {/* 플랫폼 선택 */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-bold uppercase tracking-wider text-neutral-900">생성할 플랫폼</span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setSelectedPlatforms(
-                      selectedPlatforms.size === ALL_PLATFORMS.length
-                        ? new Set<Platform>()
-                        : new Set(ALL_PLATFORMS)
-                    )
-                  }
-                  className="text-xs text-neutral-500 hover:text-neutral-900 underline underline-offset-2 transition-colors"
+        <div className="grid grid-cols-2 sm:grid-cols-3 border-t border-l border-[var(--hair)]">
+          {ALL_PLATFORMS.map((platform) => {
+            const meta = PLATFORM_META[platform];
+            const isSelected = selectedPlatforms.has(platform);
+            return (
+              <button
+                key={platform}
+                type="button"
+                onClick={() => togglePlatform(platform)}
+                aria-pressed={isSelected}
+                className={`relative text-left px-3 py-3 border-r border-b border-[var(--hair)] transition-colors ${
+                  isSelected ? 'bg-[var(--card)]' : 'hover:bg-[var(--card)]/60'
+                }`}
+              >
+                <span
+                  className="block text-[9px] tracking-[0.2em] mb-1.5"
+                  style={{ color: isSelected ? meta.color : 'var(--faint)' }}
                 >
-                  {selectedPlatforms.size === ALL_PLATFORMS.length ? '전체 해제' : '전체 선택'}
-                </button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {ALL_PLATFORMS.map((platform) => {
-                  const isSelected = selectedPlatforms.has(platform);
-                  return (
-                    <button
-                      key={platform}
-                      type="button"
-                      onClick={() => togglePlatform(platform)}
-                      className={`px-3 py-1.5 text-sm font-bold border-2 transition-all active:scale-95 uppercase tracking-wide ${
-                        isSelected
-                          ? PLATFORM_SELECTED_STYLE[platform]
-                          : `border-neutral-300 text-neutral-400 ${PLATFORM_HOVER_STYLE[platform]}`
-                      }`}
-                      style={!isSelected ? { background: '#faf6ee' } : undefined}
-                    >
-                      {PLATFORM_LABELS_ALL[platform]}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Instagram w/photo 추가 키 */}
-            {selectedPlatforms.has('instagramPhoto') && (
-              <div className="space-y-3 border-2 border-dashed border-neutral-400 p-4" style={{ background: '#f5f0e8' }}>
-                <p className="text-xs font-bold uppercase tracking-wider text-neutral-700">✦ Instagram w/photo 추가 설정</p>
-                <div className="space-y-2">
-                  <input
-                    type="password"
-                    value={unsplashKey}
-                    onChange={(e) => handleUnsplashKeyChange(e.target.value)}
-                    placeholder="Unsplash Access Key"
-                    className="w-full border border-neutral-400 px-3 py-2 text-base text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-1"
-                    style={{ background: '#faf6ee' }}
-                  />
-                  {provider !== 'openai' && (
-                    <input
-                      type="password"
-                      value={openaiImageKey}
-                      onChange={(e) => handleOpenaiImageKeyChange(e.target.value)}
-                      placeholder="OpenAI API Key (이미지 생성용)"
-                      className="w-full border border-neutral-400 px-3 py-2 text-base text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-1"
-                      style={{ background: '#faf6ee' }}
-                    />
-                  )}
-                </div>
-                <p className="text-xs text-neutral-400">Unsplash/OpenAI 키는 한번 입력하면 자동 저장됩니다</p>
-              </div>
-            )}
-
-            <button
-              type={canSubmit ? 'submit' : 'button'}
-              onClick={!canSubmit ? showToast : undefined}
-              disabled={isPending}
-              className="w-full py-3 sm:py-3.5 border-2 border-neutral-900 bg-neutral-900 text-amber-50 font-bold text-sm sm:text-base uppercase tracking-wider hover:bg-transparent hover:text-neutral-900 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-            >
-              {isPending ? '✒️ 요약 생성 중...' : '★ 요약 생성하기'}
-            </button>
-          </form>
+                  {meta.no}
+                </span>
+                <span
+                  className="block text-sm font-bold truncate"
+                  style={{ color: isSelected ? meta.color : 'var(--ink)' }}
+                >
+                  {meta.label}
+                </span>
+                <span
+                  className="block h-[3px] mt-1.5 transition-all"
+                  style={{
+                    background: isSelected ? meta.color : '#d5cab3',
+                    width: isSelected ? '100%' : '24px',
+                  }}
+                />
+                {isSelected && (
+                  <span className="absolute top-2 right-2.5 text-xs font-black" style={{ color: meta.color }}>
+                    ✓
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
-        {/* 토스트 */}
-        <div
-          className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 border-2 border-neutral-900 bg-neutral-900 text-amber-50 text-sm font-bold shadow-lg transition-all duration-300 max-w-[90vw] text-center ${
-            toast ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3 pointer-events-none'
-          }`}
-        >
-          ✦ 생성할 플랫폼을 하나 이상 선택해주세요
-        </div>
-
-        {/* 로딩 앵커 */}
-        <div ref={loadingRef} />
-
-        {/* 로딩 */}
-        {isPending && (
-          <div className="text-center py-10 space-y-3">
-            <div className="text-3xl animate-bounce">✒️</div>
-            <p className="text-neutral-500 text-sm sm:text-base animate-pulse uppercase tracking-wider">
-              페이지를 읽고 요약 중입니다...
-            </p>
-          </div>
-        )}
-
-        {/* 에러 */}
-        {error && (
-          <div className="border-2 border-neutral-900 px-4 py-4 text-sm sm:text-base text-neutral-900 flex gap-2 min-w-0" style={{ background: '#faf6ee' }}>
-            <span className="shrink-0">⚠</span>
-            <span className="break-words min-w-0">{error}</span>
-          </div>
-        )}
-
-        {/* 요약 결과 */}
-        {hasResults && (
-          <div className="space-y-4">
-            {(['twitter', 'thread', 'linkedin', 'geekNews'] as const)
-              .filter((p) => submittedPlatforms.has(p) && summaries?.[p])
-              .map((platform) => (
-                <SummaryCard key={platform} platform={platform} text={summaries![platform]!} />
-              ))}
-            {submittedPlatforms.has('instagram') && instagramPost && <InstagramCard post={instagramPost} />}
-            {submittedPlatforms.has('instagramPhoto') && instagramPhotoPost && (
-              <InstagramPhotoCard
-                post={instagramPhotoPost}
-                onImageChange={handleSlideImageChange}
-                onRegenerateImage={handleRegenerateImage}
-                isRegenerating={isRegeneratingImage}
-                imageError={imageError}
+        {/* Instagram w/photo 추가 키 */}
+        {selectedPlatforms.has('instagramPhoto') && (
+          <div className="mt-4 p-4 border border-dashed border-[var(--hair)] space-y-2.5 bg-[var(--card)]">
+            <p className="np-label">사진 카드 추가 설정</p>
+            <input
+              type="password"
+              value={unsplashKey}
+              onChange={(e) => handleUnsplashKeyChange(e.target.value)}
+              placeholder="Unsplash Access Key"
+              className="w-full border border-[var(--hair)] px-3 py-2 text-base bg-[var(--paper)] placeholder:text-[var(--faint)] focus:outline-none focus:border-[var(--ink)]"
+            />
+            {provider !== 'openai' && (
+              <input
+                type="password"
+                value={openaiImageKey}
+                onChange={(e) => handleOpenaiImageKeyChange(e.target.value)}
+                placeholder="OpenAI API Key (이미지 생성용)"
+                className="w-full border border-[var(--hair)] px-3 py-2 text-base bg-[var(--paper)] placeholder:text-[var(--faint)] focus:outline-none focus:border-[var(--ink)]"
               />
             )}
+            <p className="text-[11px] text-[var(--soft)]">한번 입력하면 자동 저장됩니다</p>
           </div>
         )}
-      </main>
-    </div>
+
+        <button
+          type={canSubmit ? 'submit' : 'button'}
+          onClick={!canSubmit ? showToast : undefined}
+          disabled={isPending}
+          className="w-full mt-5 border-2 border-[var(--ink)] bg-[var(--ink)] text-[var(--card)] py-3.5 text-xs font-bold uppercase tracking-[0.3em] hover:bg-transparent hover:text-[var(--ink)] active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+        >
+          {isPending ? '만드는 중…' : '요약 생성하기'}
+        </button>
+      </form>
+
+      {/* 토스트 */}
+      <div
+        className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 border-2 border-[var(--ink)] bg-[var(--ink)] text-[var(--card)] text-sm font-bold max-w-[90vw] text-center transition-all duration-300 ${
+          toast ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3 pointer-events-none'
+        }`}
+      >
+        생성할 플랫폼을 하나 이상 선택해주세요
+      </div>
+
+      <div ref={resultsRef} />
+
+      {error && (
+        <div className="mt-8 border-l-[3px] border-[#8a2a12] pl-3.5 py-2 flex gap-2 min-w-0">
+          <span className="shrink-0">⚠</span>
+          <span className="break-words min-w-0 text-sm">{error}</span>
+        </div>
+      )}
+
+      {/* 결과 */}
+      {(isPending || hasResults) && !error && (
+        <section className="mt-10">
+          <h2 className="np-label border-t-[5px] border-[var(--ink)] pt-1.5">
+            생성 결과{resultCount > 0 && ` · ${resultCount}개`}
+          </h2>
+
+          <div className="mt-5 space-y-5">
+            {TEXT_PLATFORMS.filter((p) => submittedPlatforms.has(p)).map((platform) => {
+              if (summaries?.[platform]) {
+                return (
+                  <SummaryCard
+                    key={platform}
+                    platform={platform}
+                    text={summaries[platform]!}
+                    previous={previous[platform]}
+                    busy={busyPlatform === platform}
+                    error={cardError[platform] ?? null}
+                    onRegenerate={handleCardRegenerate}
+                    onUndo={handleCardUndo}
+                  />
+                );
+              }
+              // 요청이 끝났는데 결과가 없으면 그 플랫폼은 실패한 것이다.
+              // 스켈레톤을 남겨두면 영원히 생성 중인 것처럼 보인다.
+              return isPending ? <SummarySkeleton key={platform} platform={platform} /> : null;
+            })}
+
+            {submittedPlatforms.has('instagram') &&
+              (instagramPost ? (
+                <InstagramCard post={instagramPost} />
+              ) : isPending ? (
+                <SummarySkeleton platform="instagram" />
+              ) : (
+                <FailedCard platform="instagram" />
+              ))}
+
+            {submittedPlatforms.has('instagramPhoto') &&
+              (instagramPhotoPost ? (
+                <InstagramPhotoCard
+                  post={instagramPhotoPost}
+                  onImageChange={handleSlideImageChange}
+                  onRegenerateImage={handleRegenerateImage}
+                  isRegenerating={isRegeneratingImage}
+                  imageError={imageError}
+                />
+              ) : isPending ? (
+                <SummarySkeleton platform="instagramPhoto" />
+              ) : (
+                <FailedCard platform="instagramPhoto" />
+              ))}
+          </div>
+        </section>
+      )}
+    </main>
   );
 }

@@ -1,8 +1,7 @@
 import type { Metadata, Viewport } from 'next';
-import { Playfair_Display, IBM_Plex_Sans } from 'next/font/google';
+import { IBM_Plex_Sans } from 'next/font/google';
 import './globals.css';
 
-const playfair = Playfair_Display({ subsets: ['latin'], weight: ['400', '700', '900'], variable: '--font-serif' });
 const ibmPlex = IBM_Plex_Sans({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-sans' });
 
 export const viewport: Viewport = {
@@ -25,7 +24,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ko">
-      <body className={`${playfair.variable} ${ibmPlex.variable} font-[family-name:var(--font-sans)] min-h-screen`} style={{ background: '#f5f0e8' }}>{children}</body>
+      <body className={`${ibmPlex.variable} font-[family-name:var(--font-sans)] min-h-screen bg-[var(--paper)]`}>{children}</body>
     </html>
   );
 }

@@ -16,6 +16,8 @@ import {
   InstagramPhotoPost,
   InstagramPhotoSlide,
   SummarizeResponse,
+  RegenerateMode,
+  TONES,
   PLATFORM_LIMITS,
 } from '@/lib/types';
 
@@ -163,6 +165,25 @@ stat:
 - 캡션: 첫 문장 훅 + 인사이트 + CTA + 한글/영문 해시태그 5~7개
 `.trim();
 
+
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/\*\*([\s\S]*?)\*\*/g, '$1')
+    .replace(/__([\s\S]*?)__/g, '$1')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/\\n/g, '\n')
+    .trim();
+}
+
+/** 플랫폼별 원문 링크. LinkedIn만 utm 을 붙인다 */
+function withSourceLink(platform: TextPlatform, text: string, url: string): string {
+  if (platform === 'linkedin') {
+    const linkedinUrl = url.includes('?') ? `${url}&utm_source=linkedin` : `${url}?utm_source=linkedin`;
+    return `${text}\n\n👉 ${linkedinUrl}`;
+  }
+  return `${text}\n\n👉 ${url}`;
+}
+
 export async function summarizeUrl(
   url: string,
   provider: Provider,
@@ -209,12 +230,7 @@ export async function summarizeUrl(
         if (typeof parsed[key] !== 'string') {
           throw new Error('AI가 올바른 형식으로 응답하지 않았습니다. 다시 시도해주세요.');
         }
-        summaries[key] = parsed[key]!
-          .replace(/\*\*([\s\S]*?)\*\*/g, '$1')
-          .replace(/__([\s\S]*?)__/g, '$1')
-          .replace(/^#{1,6}\s+/gm, '')
-          .replace(/\\n/g, '\n')
-          .trim();
+        summaries[key] = stripMarkdown(parsed[key]!);
       }
 
       // 글자 수 초과 시 문장 단위로 잘라내기
@@ -225,14 +241,9 @@ export async function summarizeUrl(
       }
 
       // 원문 링크 추가
-      const linkedinUrl = url.includes('?')
-        ? `${url}&utm_source=linkedin`
-        : `${url}?utm_source=linkedin`;
-
-      if (summaries.twitter) summaries.twitter = `${summaries.twitter}\n\n👉 ${url}`;
-      if (summaries.thread) summaries.thread = `${summaries.thread}\n\n👉 ${url}`;
-      if (summaries.linkedin) summaries.linkedin = `${summaries.linkedin}\n\n👉 ${linkedinUrl}`;
-      if (summaries.geekNews) summaries.geekNews = `${summaries.geekNews}\n\n👉 ${url}`;
+      for (const key of textPlatforms) {
+        summaries[key] = withSourceLink(key, summaries[key]!, url);
+      }
     }
 
     // Instagram 파싱
@@ -292,7 +303,7 @@ export async function summarizeUrl(
       }
     }
 
-    return { summaries, instagramPost, instagramPhotoPost };
+    return { summaries, instagramPost, instagramPhotoPost, source: { title, content } };
   } catch (err: unknown) {
     const FALLBACK = '알 수 없는 오류가 발생했습니다. 다시 시도해주세요.';
     let message = FALLBACK;
@@ -314,5 +325,68 @@ export async function summarizeUrl(
       }
     }
     return { error: message };
+  }
+}
+
+const REGENERATE_INSTRUCTIONS: Record<RegenerateMode, string> = {
+  regenerate: '같은 내용을 다른 각도에서 새로 써줘. 앞선 결과와 문장 구성이 겹치지 않게.',
+  shorter: '핵심만 남기고 눈에 띄게 짧게 줄여줘. 문장 수를 줄이되 문장은 끝맺어야 해.',
+  ...Object.fromEntries(TONES.map((t) => [t.key, t.instruction])),
+} as Record<RegenerateMode, string>;
+
+export interface RegenerateResponse {
+  text?: string;
+  error?: string;
+}
+
+/**
+ * 카드 하나만 다시 만든다.
+ * 원문(title/content)은 클라이언트가 첫 생성 때 받아 들고 있으므로 재크롤링하지 않는다.
+ */
+export async function regenerateSummary(
+  platform: TextPlatform,
+  mode: RegenerateMode,
+  source: { title: string; content: string },
+  url: string,
+  provider: Provider,
+  apiKey: string,
+): Promise<RegenerateResponse> {
+  try {
+    const modifier = REGENERATE_INSTRUCTIONS[mode];
+    if (!modifier) return { error: '알 수 없는 요청입니다.' };
+
+    const model = createModel(provider, apiKey);
+    const limit = PLATFORM_LIMITS[platform];
+
+    const prompt = `
+다음 글을 ${PLATFORM_INSTRUCTIONS[platform].replace(/^- \w+: /, '')} 형식에 맞춰 한국어로 다시 요약해줘.
+
+제목: ${source.title}
+
+본문:
+${source.content}
+
+추가 지시: ${modifier}
+
+반드시 ${limit}자 이하로 쓰고, 한국어 맞춤법과 띄어쓰기를 지켜줘.
+**, __, ## 같은 마크다운 문법은 절대 쓰지 마. 줄바꿈이 필요하면 실제 줄바꿈을 써.
+원문 링크는 넣지 마. 자동으로 붙는다.
+
+요약문만 출력해. 다른 설명이나 따옴표 없이.
+`.trim();
+
+    const result = await generateText({ model, prompt });
+
+    let text = stripMarkdown(result.text);
+    if (!text) return { error: 'AI가 빈 응답을 반환했습니다. 다시 시도해주세요.' };
+    if (text.length > limit) text = truncateAtSentence(text, limit);
+
+    return { text: withSourceLink(platform, text, url) };
+  } catch (err: unknown) {
+    const raw = err instanceof Error ? err.message : '';
+    if (/401|authentication|invalid.*key|api.?key|unauthorized/i.test(raw)) {
+      return { error: 'API 키가 올바르지 않습니다. 키를 확인하고 다시 시도해주세요.' };
+    }
+    return { error: raw || '다시 만드는 중 오류가 발생했습니다.' };
   }
 }

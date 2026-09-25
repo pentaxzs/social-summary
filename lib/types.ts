@@ -32,6 +32,26 @@ export const PROVIDERS: Record<Provider, ProviderConfig> = {
   },
 };
 
+export interface PlatformMeta {
+  /** 신문 섹션 번호 — 지면 순서를 그대로 쓴다 */
+  no: string;
+  label: string;
+  /** 잉크 톤으로 옮긴 플랫폼 식별색 */
+  color: string;
+}
+
+export const TONES = [
+  { key: 'casual',       label: '캐주얼하게', instruction: '친구에게 말하듯 편안한 구어체로. 격식은 빼되 내용은 유지.' },
+  { key: 'professional', label: '전문적으로', instruction: '업무 문서 수준의 정제된 문장으로. 감탄사와 이모지는 줄인다.' },
+  { key: 'friendly',     label: '친근하게',   instruction: '따뜻하고 다정한 말투로. 독자를 배려하는 어조.' },
+  { key: 'assertive',    label: '단호하게',   instruction: '주장을 분명히 드러내는 단정적인 어조로. 군더더기를 걷어낸다.' },
+] as const;
+
+export type Tone = (typeof TONES)[number]['key'];
+
+/** 카드 하나를 다시 만들 때 쓰는 지시 */
+export type RegenerateMode = 'regenerate' | 'shorter' | Tone;
+
 export interface PlatformSummaries {
   twitter: string;
   thread: string;
@@ -78,10 +98,17 @@ export interface InstagramPhotoPost {
   caption: string;
 }
 
+/** 첫 생성 때 추출한 원문. 재생성 시 다시 긁지 않으려고 클라이언트가 들고 있는다 */
+export interface SourceDoc {
+  title: string;
+  content: string;
+}
+
 export interface SummarizeResult {
   summaries: Partial<PlatformSummaries>;
   instagramPost: InstagramPost | null;
   instagramPhotoPost: InstagramPhotoPost | null;
+  source: SourceDoc;
   error?: never;
 }
 
@@ -89,6 +116,7 @@ export interface SummarizeError {
   summaries?: never;
   instagramPost?: never;
   instagramPhotoPost?: never;
+  source?: never;
   error: string;
 }
 
@@ -117,4 +145,13 @@ export const PLATFORM_LABELS: Record<keyof PlatformSummaries, string> = {
   thread: '🧵 Thread',
   linkedin: '💼 LinkedIn',
   geekNews: '🤓 Geek News',
+};
+
+export const PLATFORM_META: Record<Platform, PlatformMeta> = {
+  twitter:        { no: '01', label: '𝕏 Twitter',  color: '#14120e' },
+  thread:         { no: '02', label: 'Thread',     color: '#3b352a' },
+  linkedin:       { no: '03', label: 'LinkedIn',   color: '#1b3a55' },
+  geekNews:       { no: '04', label: 'Geek News',  color: '#7a3d12' },
+  instagram:      { no: '05', label: 'Instagram',  color: '#6e1b33' },
+  instagramPhoto: { no: '06', label: '사진 카드',   color: '#6e1b33' },
 };
