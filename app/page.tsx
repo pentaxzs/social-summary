@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useRef, useTransition } from 'react';
-const HEADER_EMOJIS = ['📰', '🗞️', '✒️', '🖋️', '📜'];
 import { ApiKeyInput } from '@/components/ApiKeyInput';
 import { SummaryCard } from '@/components/SummaryCard';
 import { InstagramCard } from '@/components/InstagramCard';
@@ -46,9 +45,7 @@ export default function Home() {
   const [provider, setProvider] = useState<Provider>('anthropic');
   const [apiKey, setApiKey] = useState('');
   const [url, setUrl] = useState('');
-  const [selectedPlatforms, setSelectedPlatforms] = useState<Set<Platform>>(
-    () => new Set([ALL_PLATFORMS[Math.floor(Math.random() * ALL_PLATFORMS.length)]])
-  );
+  const [selectedPlatforms, setSelectedPlatforms] = useState<Set<Platform>>(new Set());
   const [toast, setToast] = useState(false);
   const [summaries, setSummaries] = useState<Partial<PlatformSummaries> | null>(null);
   const [instagramPost, setInstagramPost] = useState<InstagramPost | null>(null);
@@ -60,7 +57,6 @@ export default function Home() {
   const [history, setHistory] = useState<string[]>([]);
   const [isPending, startTransition] = useTransition();
   const loadingRef = useRef<HTMLDivElement>(null);
-  const [headerEmoji] = useState(() => HEADER_EMOJIS[Math.floor(Math.random() * HEADER_EMOJIS.length)]);
   const [isRegeneratingImage, setIsRegeneratingImage] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
 
@@ -269,7 +265,7 @@ export default function Home() {
                   onClick={() =>
                     setSelectedPlatforms(
                       selectedPlatforms.size === ALL_PLATFORMS.length
-                        ? new Set([ALL_PLATFORMS[0]])
+                        ? new Set<Platform>()
                         : new Set(ALL_PLATFORMS)
                     )
                   }
