@@ -2,426 +2,344 @@
 
 import { useState } from 'react';
 import { InstagramPost, InstagramSlide } from '@/lib/types';
+import { CANVAS_HEAD, CANVAS_BODY, waitForCardFonts } from '@/lib/fonts';
+import {
+  parseHeadline,
+  jittersFor,
+  stripEmphasis,
+  fitScale,
+  EMPHASIS_SCALE,
+  TextRun,
+  JitterStrength,
+} from '@/lib/handwriting';
 
-/* ─── Utilities ─── */
+/* ─────────────────────────────────────────────
+ * 고정 팔레트.
+ * 손글씨 카드뉴스는 캐러셀 전체가 한 벌로 읽혀야 힘이 생긴다.
+ * 그래서 슬라이드마다 AI 가 고른 background_color / accent_color 는
+ * 이 컴포넌트에서 쓰지 않는다 (사진 배경을 쓰는 InstagramPhotoCard 는 그대로).
+ * ───────────────────────────────────────────── */
+const PAPER = '#f5f2ec';
+const INK = '#4a3426';
+const INK_SOFT = '#5c4435';
+const INK_FAINT = '#8d7866';
+const ACCENT = '#2e9e63';
 
-function getTextColor(hex: string): '#ffffff' | '#1a1a1a' {
-  const h = (hex || '#000000').replace('#', '');
-  if (h.length < 6) return '#ffffff';
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.55 ? '#1a1a1a' : '#ffffff';
+const S = 1080; // 인스타 1:1 기준 해상도
+const SIDE_PAD = 0.075; // 좌우 여백 비율. 미리보기의 7.5cqw 와 같아야 한다
+const TEXT_UNITS = (1 - SIDE_PAD * 2) / 1; // 본문 영역을 '글자 폭' 단위로 환산할 때 쓰는 분자
+
+/** 헤드라인 기준 크기 (1080 기준 px). 미리보기는 같은 값을 cqw 로 환산해 쓴다 */
+const HEAD_SIZE = { cover: 138, content: 128, outro: 104 } as const;
+const pxToCqw = (px: number) => (px / S) * 100;
+
+/* ─── Canvas: 글자별 흔들림 + 강조 ─── */
+
+interface CharSpec {
+  ch: string;
+  size: number;
+  color: string;
 }
 
-function secondary(tc: string): string {
-  return tc === '#ffffff' ? 'rgba(255,255,255,0.58)' : 'rgba(0,0,0,0.42)';
-}
-
-function wrapText(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  maxWidth: number,
-  maxLines = 10
-): string[] {
-  const lines: string[] = [];
-  const words = text.split(' ');
-  let cur = '';
-  for (const word of words) {
-    const test = cur ? `${cur} ${word}` : word;
-    if (ctx.measureText(test).width > maxWidth && cur) {
-      lines.push(cur);
-      if (lines.length >= maxLines) return lines;
-      cur = word;
-    } else {
-      cur = test;
-    }
+function toChars(runs: TextRun[], baseSize: number): CharSpec[] {
+  const out: CharSpec[] = [];
+  for (const run of runs) {
+    const size = run.emphasis ? baseSize * EMPHASIS_SCALE : baseSize;
+    const color = run.emphasis ? ACCENT : INK;
+    for (const ch of run.text) out.push({ ch, size, color });
   }
-  if (cur) lines.push(cur);
-  return lines;
+  return out;
 }
 
-function splitLines(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  maxWidth: number,
-  maxLines: number
-): string[] {
-  const result: string[] = [];
-  const segments = text.replace(/\\n/g, '\n').split('\n').filter(s => s.trim());
-  for (const seg of segments) {
-    const wrapped = wrapText(ctx, seg.trim(), maxWidth, maxLines - result.length);
-    result.push(...wrapped);
-    if (result.length >= maxLines) break;
+function measureChars(ctx: CanvasRenderingContext2D, chars: CharSpec[], family: string): number {
+  let w = 0;
+  for (const c of chars) {
+    ctx.font = `${c.size}px "${family}"`;
+    w += ctx.measureText(c.ch).width;
   }
-  return result.slice(0, maxLines);
+  return w;
 }
 
-function roundRect(
+/** 가운데 정렬로 한 줄을 그린다. baselineY 는 글자 밑선 */
+function drawChars(
   ctx: CanvasRenderingContext2D,
-  x: number, y: number, w: number, h: number, r: number
+  chars: CharSpec[],
+  seedText: string,
+  strength: JitterStrength,
+  cx: number,
+  baselineY: number,
+  family: string,
 ) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.arcTo(x + w, y, x + w, y + r, r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
-  ctx.lineTo(x + r, y + h);
-  ctx.arcTo(x, y + h, x, y + h - r, r);
-  ctx.lineTo(x, y + r);
-  ctx.arcTo(x, y, x + r, y, r);
-  ctx.closePath();
-}
+  const jitters = jittersFor(seedText, chars.length, strength);
+  const total = measureChars(ctx, chars, family);
+  let x = cx - total / 2;
 
-function hexToRgba(hex: string, alpha: number): string {
-  const h = (hex || '#000000').replace('#', '');
-  if (h.length < 6) return `rgba(0,0,0,${alpha})`;
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  return `rgba(${r},${g},${b},${alpha})`;
-}
-
-const F = `"Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif`;
-
-/* ─── Emoji helpers ─── */
-
-const KEYWORD_EMOJI_MAP: [string[], string][] = [
-  [['배경', '역사', '기원', '히스토리', '유래'], '📖'],
-  [['핵심', '포인트', '요점', '주요', '중요'], '💡'],
-  [['결론', '마무리', '요약', '정리', 'cta', '저장'], '✅'],
-  [['전망', '미래', '앞으로', '예측', '방향'], '🚀'],
-  [['분석', '해석', '인사이트', '이해'], '🔍'],
-  [['방법', '전략', '방식', '솔루션', '해결', '접근'], '🎯'],
-  [['영향', '효과', '임팩트', '결과'], '⚡'],
-  [['데이터', '수치', '통계', '숫자', '지표'], '📊'],
-  [['기술', 'ai', '인공지능', 'tech', '도구'], '⚙️'],
-  [['트렌드', '동향', '현황', '변화', '흐름'], '🔄'],
-  [['문제', '이슈', '과제', '도전', '한계'], '⚠️'],
-  [['사람', '팀', '조직', '인재', '커뮤니티'], '👥'],
-  [['돈', '비용', '투자', '수익', '경제', '금융'], '💰'],
-  [['시간', '속도', '기간', '일정', '프로세스'], '⏱️'],
-  [['성장', '증가', '개선', '발전'], '📈'],
-  [['아이디어', '혁신', '창의', '상상'], '✨'],
-  [['글로벌', '세계', '해외', '국제'], '🌐'],
-  [['디자인', '브랜드', '비주얼'], '🎨'],
-  [['콘텐츠', '미디어', '소셜', '채널'], '📱'],
-];
-
-const FALLBACK_EMOJIS = ['✨', '💡', '🚀', '🎯', '⚡', '🔍', '📖', '🔄', '📊', '🌐'];
-
-function getKeywordEmoji(keyword: string | undefined, index: number): string {
-  if (keyword) {
-    const k = keyword.toLowerCase();
-    for (const [keys, emoji] of KEYWORD_EMOJI_MAP) {
-      if (keys.some(key => k.includes(key))) return emoji;
-    }
-  }
-  return FALLBACK_EMOJIS[index % FALLBACK_EMOJIS.length];
-}
-
-function getStatEmoji(unit?: string): string {
-  if (!unit) return '📈';
-  const u = unit.toLowerCase();
-  if (u === '%') return '📊';
-  if (['원', '억', '만', '달러', '$'].some(s => u.includes(s))) return '💰';
-  if (['분', '시간', '초', 'h', 'min'].some(s => u.includes(s))) return '⏱️';
-  if (['명', '개', '곳'].some(s => u.includes(s))) return '👥';
-  if (['배'].some(s => u.includes(s))) return '📈';
-  return '📊';
-}
-
-/* ─── Canvas: Cover layout ─── */
-
-function drawCover(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: number) {
-  const tc = getTextColor(slide.background_color);
-  const sc = secondary(tc);
-  const PAD = 96;
-
-  ctx.textBaseline = 'top';
-
-  const HL = 100, HL_LH = 122;
-  ctx.font = `900 ${HL}px ${F}`;
-  const hlLines = splitLines(ctx, slide.headline, S - PAD * 2, 3);
-
-  const labelH  = slide.label ? 36 + 28 : 0;
-  const hlH     = hlLines.length * HL_LH;
-  const divH    = 52 + 5 + 52;
-  const bodyH   = slide.body ? 44 : 0;
-  const totalH  = labelH + hlH + divH + bodyH;
-  let y = Math.max(80, Math.round((S - totalH) / 2));
-
-  if (slide.label) {
-    ctx.font = `500 36px ${F}`;
-    ctx.fillStyle = slide.accent_color;
+  chars.forEach((c, i) => {
+    const j = jitters[i];
+    ctx.font = `${c.size}px "${family}"`;
+    const w = ctx.measureText(c.ch).width;
+    ctx.save();
+    ctx.translate(x + w / 2, baselineY + j.dy * c.size);
+    ctx.rotate((j.rot * Math.PI) / 180);
+    ctx.scale(j.scale, j.scale);
+    ctx.fillStyle = c.color;
     ctx.textAlign = 'center';
-    ctx.fillText(slide.label, S / 2, y);
-    y += 36 + 28;
-  }
-
-  ctx.font = `900 ${HL}px ${F}`;
-  ctx.fillStyle = tc;
-  ctx.textAlign = 'center';
-  hlLines.forEach((line, i) => ctx.fillText(line, S / 2, y + i * HL_LH));
-  y += hlH + 52;
-
-  ctx.fillStyle = slide.accent_color;
-  ctx.fillRect(S / 2 - 64, y, 128, 5);
-  y += 5 + 52;
-
-  if (slide.body) {
-    ctx.font = `400 44px ${F}`;
-    ctx.fillStyle = sc;
-    ctx.textAlign = 'center';
-    wrapText(ctx, slide.body, S - PAD * 2.5, 2).forEach((line, i) => {
-      ctx.fillText(line, S / 2, y + i * 58);
-    });
-  }
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(c.ch, 0, 0);
+    ctx.restore();
+    x += w;
+  });
 }
 
-/* ─── Canvas: Content layout (with emoji marker) ─── */
-
-function drawContent(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: number, index: number) {
-  const tc = getTextColor(slide.background_color);
-  const sc = secondary(tc);
-  const LEFT = 90, PAD = 90;
-  const emoji = getKeywordEmoji(slide.keyword, index);
-
-  // ── Measure all blocks first for vertical centering ──
-  const KW_FS = 34, EMOJI_FS = 48;
-  const HL = 82, HL_LH = 102;
-  const BODY_FS = 44, BODY_LH = BODY_FS + 16;
-
-  ctx.font = `900 ${HL}px ${F}`;
-  const hlLines = splitLines(ctx, slide.headline, S - PAD * 2, 3);
-  const hlH = hlLines.length * HL_LH;
-
-  const rawBody = (slide.body || '').replace(/\\n/g, '\n');
-  const bodyParagraphs = rawBody.split('\n').filter(Boolean);
-  ctx.font = `400 ${BODY_FS}px ${F}`;
-  const bodyLinesAll: string[] = [];
-  for (const para of bodyParagraphs) {
-    const wrapped = wrapText(ctx, para, S - PAD * 2, 3);
-    bodyLinesAll.push(...wrapped);
-    if (bodyLinesAll.length >= 5) break;
-  }
-  const bodyH = bodyLinesAll.length * BODY_LH;
-
-  // Block heights: [emoji+keyword row] + gap + headline + divider + body
-  const kwRowH = Math.max(EMOJI_FS, KW_FS) + 4; // emoji and keyword are same line
-  const totalH = kwRowH + 40 + hlH + 36 + 4 + 36 + bodyH;
-  let y = Math.max(80, Math.round((S - totalH) / 2));
-
-  ctx.textBaseline = 'top';
-
-  // ── Emoji + Keyword inline (left-aligned) ──
-  // Draw emoji
-  ctx.font = `${EMOJI_FS}px serif`;
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  const emojiMidY = y + kwRowH / 2;
-  ctx.fillText(emoji, LEFT, emojiMidY);
-
-  // Draw keyword text next to emoji
-  if (slide.keyword) {
-    const emojiW = ctx.measureText(emoji).width;
-    ctx.font = `700 ${KW_FS}px ${F}`;
-    ctx.fillStyle = slide.accent_color;
-    ctx.textBaseline = 'middle';
-    ctx.fillText(slide.keyword, LEFT + emojiW + 16, emojiMidY);
-  }
-
-  y += kwRowH + 40;
-
-  // ── Headline ──
-  ctx.font = `900 ${HL}px ${F}`;
-  ctx.fillStyle = tc;
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'top';
-  hlLines.forEach((line, i) => ctx.fillText(line, LEFT, y + i * HL_LH));
-  y += hlH + 36;
-
-  // ── Divider ──
-  ctx.fillStyle = slide.accent_color;
-  ctx.fillRect(LEFT, y, 72, 4);
-  y += 4 + 36;
-
-  // ── Body ──
-  if (bodyLinesAll.length > 0) {
-    ctx.font = `400 ${BODY_FS}px ${F}`;
-    ctx.fillStyle = tc === '#ffffff' ? 'rgba(255,255,255,0.82)' : 'rgba(0,0,0,0.75)';
-    ctx.textAlign = 'left';
-    bodyLinesAll.forEach((line, i) => ctx.fillText(line, LEFT, y + i * BODY_LH));
-  }
+/** 강조가 섞인 헤드라인을 여러 줄로. 그린 높이를 돌려준다 */
+function drawHeadline(
+  ctx: CanvasRenderingContext2D,
+  raw: string,
+  topY: number,
+  baseSize: number,
+): number {
+  const lines = parseHeadline(raw.replace(/\\n/g, '\n'));
+  // 크게 잡아두고, 긴 줄이 나오면 그만큼 줄인다
+  const size = baseSize * fitScale(lines, (S * TEXT_UNITS) / baseSize);
+  const lh = size * 1.32;
+  lines.forEach((runs, i) => {
+    const chars = toChars(runs, size);
+    const seed = runs.map((r) => r.text).join('');
+    drawChars(ctx, chars, seed, 'strong', S / 2, topY + lh * (i + 0.78), CANVAS_HEAD);
+  });
+  return lines.length * lh;
 }
 
-/* ─── Canvas: Stat layout ─── */
+/** 레이아웃 높이를 미리 잴 때 쓴다 — 실제로 그려지는 줄 높이와 같아야 한다 */
+function headlineHeight(raw: string, baseSize: number): number {
+  const lines = parseHeadline(raw.replace(/\\n/g, '\n'));
+  const size = baseSize * fitScale(lines, (S * TEXT_UNITS) / baseSize);
+  return lines.length * size * 1.32;
+}
 
-function drawStat(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: number) {
-  const tc = getTextColor(slide.background_color);
-  const sc = secondary(tc);
+/** 본문/부제. 흔들림은 약하게 */
+function drawBody(
+  ctx: CanvasRenderingContext2D,
+  raw: string,
+  topY: number,
+  size: number,
+  color: string,
+): number {
+  const lines = raw.replace(/\\n/g, '\n').split('\n').filter((l) => l.trim());
+  const lh = size * 1.42;
+  lines.forEach((line, i) => {
+    const chars = [...line].map((ch) => ({ ch, size, color }));
+    drawChars(ctx, chars, line, 'soft', S / 2, topY + lh * (i + 0.76), CANVAS_BODY);
+  });
+  return lines.length * lh;
+}
 
-  // Sparkline background (decorative)
+/* ─── Canvas: 손그림 장식 ─── */
+
+function drawSlashes(ctx: CanvasRenderingContext2D, cx: number, cy: number, dir: 1 | -1) {
   ctx.save();
-  ctx.strokeStyle = hexToRgba(slide.accent_color, 0.20);
-  ctx.lineWidth = 5;
+  ctx.strokeStyle = ACCENT;
+  ctx.lineWidth = 9;
   ctx.lineCap = 'round';
+  for (const off of [0, 26]) {
+    const x = cx + dir * off;
+    ctx.beginPath();
+    ctx.moveTo(x, cy - 16);
+    ctx.lineTo(x + dir * 20, cy);
+    ctx.lineTo(x, cy + 16);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+  ctx.save();
+  ctx.strokeStyle = ACCENT;
+  ctx.lineWidth = 7;
   ctx.lineJoin = 'round';
   ctx.beginPath();
-  ctx.moveTo(60, S * 0.82);
-  ctx.bezierCurveTo(S * 0.25, S * 0.70, S * 0.40, S * 0.78, S * 0.55, S * 0.68);
-  ctx.bezierCurveTo(S * 0.70, S * 0.58, S * 0.82, S * 0.50, S - 60, S * 0.36);
+  for (let i = 0; i < 10; i++) {
+    const rad = i % 2 === 0 ? r : r * 0.42;
+    const a = (Math.PI / 5) * i - Math.PI / 2;
+    const px = cx + Math.cos(a) * rad;
+    const py = cy + Math.sin(a) * rad;
+    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+  }
+  ctx.closePath();
   ctx.stroke();
   ctx.restore();
-
-  ctx.textBaseline = 'alphabetic';
-
-  // Badge pill (top-left) — with stat emoji
-  const statEmoji = getStatEmoji(slide.stat_unit);
-  if (slide.stat_badge) {
-    const FS = 30, PX = 22, PY = 12;
-    ctx.font = `700 ${FS}px ${F}`;
-    const badgeText = `${statEmoji}  ${slide.stat_badge}`;
-    const bw = ctx.measureText(badgeText).width + PX * 2;
-    const bh = FS + PY * 2;
-    ctx.fillStyle = slide.accent_color;
-    roundRect(ctx, 80, 80, bw, bh, 8);
-    ctx.fill();
-    ctx.fillStyle = slide.background_color;
-    ctx.textAlign = 'left';
-    ctx.fillText(badgeText, 80 + PX, 80 + PY + FS * 0.8);
-  }
-
-  // Stat value + unit
-  const VAL_SIZE = 210, UNIT_SIZE = 140, GAP = 14;
-  ctx.font = `900 ${VAL_SIZE}px ${F}`;
-  const valW = slide.stat_value ? ctx.measureText(slide.stat_value).width : 0;
-  ctx.font = `700 ${UNIT_SIZE}px ${F}`;
-  const unitW = slide.stat_unit ? ctx.measureText(slide.stat_unit).width : 0;
-  const totalW = valW + (slide.stat_unit ? GAP + unitW : 0);
-  const startX = (S - totalW) / 2;
-  const baseY = S * 0.56;
-
-  if (slide.stat_value) {
-    ctx.font = `900 ${VAL_SIZE}px ${F}`;
-    ctx.fillStyle = slide.accent_color;
-    ctx.textAlign = 'left';
-    ctx.fillText(slide.stat_value, startX, baseY);
-  }
-  if (slide.stat_unit) {
-    ctx.font = `700 ${UNIT_SIZE}px ${F}`;
-    ctx.fillStyle = tc;
-    ctx.fillText(slide.stat_unit, startX + valW + GAP, baseY + (VAL_SIZE - UNIT_SIZE) * 0.38);
-  }
-
-  if (slide.headline) {
-    ctx.textBaseline = 'top';
-    ctx.font = `400 46px ${F}`;
-    ctx.fillStyle = tc;
-    ctx.textAlign = 'center';
-    wrapText(ctx, slide.headline, S - 160, 2).forEach((line, i) => {
-      ctx.fillText(line, S / 2, baseY + 70 + i * 62);
-    });
-  }
-
-  if (slide.source) {
-    ctx.textBaseline = 'alphabetic';
-    ctx.font = `400 28px ${F}`;
-    ctx.fillStyle = sc;
-    ctx.textAlign = 'left';
-    ctx.fillText(`SOURCE · ${slide.source}`, 80, S - 80);
-  }
 }
 
-/* ─── Canvas: Outro layout ─── */
-
-function drawOutro(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: number) {
-  const tc = getTextColor(slide.background_color);
-  const sc = secondary(tc);
-  const accent = slide.accent_color;
-  const cx = S / 2;
-
+function drawSwoosh(ctx: CanvasRenderingContext2D, cx: number, y: number, w: number) {
   ctx.save();
-  ctx.filter = 'blur(60px)';
-  const glowBL = ctx.createRadialGradient(S * 0.12, S * 0.88, 0, S * 0.12, S * 0.88, 460);
-  glowBL.addColorStop(0, hexToRgba(accent, 0.55));
-  glowBL.addColorStop(0.5, hexToRgba(accent, 0.18));
-  glowBL.addColorStop(1, hexToRgba(accent, 0));
-  ctx.fillStyle = glowBL;
-  ctx.fillRect(0, 0, S, S);
-  const glowTR = ctx.createRadialGradient(S * 0.88, S * 0.12, 0, S * 0.88, S * 0.12, 260);
-  glowTR.addColorStop(0, hexToRgba(accent, 0.28));
-  glowTR.addColorStop(1, hexToRgba(accent, 0));
-  ctx.fillStyle = glowTR;
-  ctx.fillRect(0, 0, S, S);
-  ctx.filter = 'none';
+  ctx.strokeStyle = ACCENT;
+  ctx.lineWidth = 12;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(cx - w / 2, y);
+  ctx.bezierCurveTo(cx - w / 4, y - 11, cx + w / 4, y - 11, cx + w / 2, y - 3);
+  ctx.stroke();
   ctx.restore();
-
-  ctx.textBaseline = 'top';
-  ctx.textAlign = 'center';
-
-  let y = 285;
-
-  ctx.font = `500 30px ${F}`;
-  ctx.fillStyle = 'rgba(255,255,255,0.38)';
-  ctx.fillText('NEWSLETTER', cx, y);
-  y += 30 + 44;
-
-  ctx.font = `600 66px ${F}`;
-  ctx.fillStyle = 'rgba(255,255,255,0.70)';
-  ctx.fillText('매주 수요일 저녁,', cx, y);
-  y += 66 + 18;
-
-  ctx.font = `900 106px ${F}`;
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText('메이커스노트', cx, y);
-  y += 106 + 46;
-
-  ctx.font = `400 48px ${F}`;
-  ctx.fillStyle = 'rgba(255,255,255,0.88)';
-  const bodyLines = splitLines(ctx, '뉴스레터를 통해 매주 새로운 소식을 받아보세요', S - 180, 2);
-  bodyLines.forEach((line, i) => ctx.fillText(line, cx, y + i * 62));
-  y += bodyLines.length * 62 + 44;
-
-  ctx.font = `400 34px ${F}`;
-  ctx.fillStyle = 'rgba(255,255,255,0.68)';
-  ctx.fillText("프로필 링크 또는 '메이커스노트'를 검색해보세요.", cx, y);
-  y += 34 + 36;
-
-  ctx.font = `600 38px ${F}`;
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText('maily.so/makersnote', cx, y);
 }
 
-/* ─── Compose full canvas ─── */
+function drawPill(ctx: CanvasRenderingContext2D, text: string, cx: number, topY: number): number {
+  const fs = 46;
+  ctx.font = `${fs}px "${CANVAS_BODY}"`;
+  const w = ctx.measureText(text).width + 80;
+  const h = fs + 36;
+  ctx.save();
+  ctx.fillStyle = ACCENT;
+  ctx.beginPath();
+  const r = h / 2;
+  ctx.moveTo(cx - w / 2 + r, topY);
+  ctx.lineTo(cx + w / 2 - r, topY);
+  ctx.arcTo(cx + w / 2, topY, cx + w / 2, topY + r, r);
+  ctx.arcTo(cx + w / 2, topY + h, cx + w / 2 - r, topY + h, r);
+  ctx.lineTo(cx - w / 2 + r, topY + h);
+  ctx.arcTo(cx - w / 2, topY + h, cx - w / 2, topY + r, r);
+  ctx.arcTo(cx - w / 2, topY, cx - w / 2 + r, topY, r);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = PAPER;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, cx, topY + h / 2 + 2);
+  ctx.restore();
+  return h;
+}
+
+/* ─── Canvas: 레이아웃 4종 ─── */
+
+function drawCover(ctx: CanvasRenderingContext2D, slide: InstagramSlide) {
+  const HL = HEAD_SIZE.cover;
+  const bodyLines = (slide.body || '').replace(/\\n/g, '\n').split('\n').filter((l) => l.trim()).length;
+
+  const eyebrowH = slide.label ? 54 + 42 : 0;
+  const hlH = headlineHeight(slide.headline, HL);
+  const bodyH = bodyLines ? 46 + bodyLines * 66 : 0;
+  let y = Math.max(140, (S - (eyebrowH + hlH + bodyH)) / 2);
+
+  if (slide.label) {
+    ctx.font = `54px "${CANVAS_BODY}"`;
+    const w = ctx.measureText(slide.label).width;
+    drawChars(ctx, [...slide.label].map((ch) => ({ ch, size: 54, color: INK })), slide.label, 'soft', S / 2, y + 44, CANVAS_BODY);
+    // 미리보기와 같은 방향 — 빗금이 글자 쪽(안쪽)을 향한다
+    drawSlashes(ctx, S / 2 - w / 2 - 92, y + 26, 1);
+    drawSlashes(ctx, S / 2 + w / 2 + 92, y + 26, -1);
+    y += eyebrowH;
+  }
+
+  y += drawHeadline(ctx, slide.headline, y, HL);
+
+  if (slide.body) {
+    y += 46;
+    drawBody(ctx, slide.body, y, 48, INK_SOFT);
+  }
+
+  drawStar(ctx, S / 2, S - 110, 34);
+}
+
+function drawContent(ctx: CanvasRenderingContext2D, slide: InstagramSlide) {
+  const HL = HEAD_SIZE.content;
+  const bodyLines = (slide.body || '').replace(/\\n/g, '\n').split('\n').filter((l) => l.trim()).length;
+
+  const kwH = slide.keyword ? 82 + 40 : 0;
+  const hlH = headlineHeight(slide.headline, HL);
+  const bodyH = bodyLines ? 50 + bodyLines * 64 : 0;
+  let y = Math.max(140, (S - (kwH + hlH + bodyH)) / 2);
+
+  if (slide.keyword) {
+    drawPill(ctx, slide.keyword, S / 2, y);
+    y += kwH;
+  }
+  y += drawHeadline(ctx, slide.headline, y, HL);
+  if (slide.body) {
+    y += 50;
+    drawBody(ctx, slide.body, y, 46, INK_SOFT);
+  }
+}
+
+function drawStat(ctx: CanvasRenderingContext2D, slide: InstagramSlide) {
+  const VAL = 300;
+  const UNIT = 128;
+  const badge = slide.stat_badge || '수치';
+
+  let y = 250;
+  drawPill(ctx, badge, S / 2, y);
+  y += 82 + 60;
+
+  const value = slide.stat_value || '—';
+  const unit = slide.stat_unit || '';
+  ctx.font = `${VAL}px "${CANVAS_HEAD}"`;
+  const vw = ctx.measureText(value).width;
+  ctx.font = `${UNIT}px "${CANVAS_HEAD}"`;
+  const uw = unit ? ctx.measureText(unit).width + 22 : 0;
+  const startX = S / 2 - (vw + uw) / 2;
+
+  drawChars(ctx, [...value].map((ch) => ({ ch, size: VAL, color: ACCENT })), value, 'strong', startX + vw / 2, y + VAL * 0.82, CANVAS_HEAD);
+  if (unit) {
+    ctx.font = `${UNIT}px "${CANVAS_HEAD}"`;
+    ctx.fillStyle = INK;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(unit, startX + vw + 22, y + VAL * 0.82);
+  }
+  y += VAL + 50;
+
+  if (slide.headline) y += drawBody(ctx, stripEmphasis(slide.headline), y, 48, INK_SOFT);
+  if (slide.source) {
+    y += 26;
+    drawBody(ctx, slide.source, y, 36, INK_FAINT);
+  }
+}
+
+function drawOutro(ctx: CanvasRenderingContext2D, slide: InstagramSlide) {
+  const HL = HEAD_SIZE.outro;
+  const hlH = headlineHeight(slide.headline, HL);
+  const bodyLines = (slide.body || '').replace(/\\n/g, '\n').split('\n').filter((l) => l.trim()).length;
+  const bodyH = bodyLines ? 54 + bodyLines * 66 : 0;
+
+  let y = Math.max(170, (S - (hlH + bodyH)) / 2);
+  y += drawHeadline(ctx, slide.headline, y, HL);
+
+  if (slide.body) {
+    y += 54;
+    const BODY = 46;
+    const h = drawBody(ctx, slide.body, y, BODY, INK_SOFT);
+    // 밑줄 폭은 가장 긴 줄에 맞춘다. 고정값을 쓰면 짧은 문구에선 튀어나온다
+    ctx.font = `${BODY}px "${CANVAS_BODY}"`;
+    const widest = Math.max(
+      ...slide.body.replace(/\\n/g, '\n').split('\n').map((l) => ctx.measureText(l.trim()).width),
+    );
+    drawSwoosh(ctx, S / 2, y + h + 34, Math.min(widest + 34, S - 180));
+  }
+  drawStar(ctx, S / 2, S - 110, 34);
+}
+
+/* ─── Canvas 조립 ─── */
 
 function buildCanvas(slide: InstagramSlide, index: number, total: number): HTMLCanvasElement {
-  const S = 1080;
   const canvas = document.createElement('canvas');
   canvas.width = S;
   canvas.height = S;
   const ctx = canvas.getContext('2d')!;
 
-  ctx.fillStyle = slide.background_color || '#1e3a5f';
+  ctx.fillStyle = PAPER;
   ctx.fillRect(0, 0, S, S);
 
   const layout = slide.layout ?? (index === 0 ? 'cover' : 'content');
+  if (layout === 'cover') drawCover(ctx, slide);
+  else if (layout === 'stat') drawStat(ctx, slide);
+  else if (layout === 'outro') drawOutro(ctx, slide);
+  else drawContent(ctx, slide);
 
-  if (layout === 'cover')        drawCover(ctx, slide, S);
-  else if (layout === 'stat')    drawStat(ctx, slide, S);
-  else if (layout === 'outro')   drawOutro(ctx, slide, S);
-  else                           drawContent(ctx, slide, S, index);
-
-  // Slide number (top-right) — skip for stat
   if (layout !== 'stat') {
-    ctx.textBaseline = 'top';
-    ctx.font = `400 30px ${F}`;
-    ctx.fillStyle = secondary(getTextColor(slide.background_color));
+    ctx.font = `34px "${CANVAS_BODY}"`;
+    ctx.fillStyle = INK_FAINT;
     ctx.textAlign = 'right';
-    ctx.fillText(`${index + 1} / ${total}`, S - 72, 72);
+    ctx.textBaseline = 'top';
+    ctx.fillText(`${index + 1} / ${total}`, S - 76, 76);
   }
-
   return canvas;
 }
 
@@ -437,289 +355,310 @@ function triggerDownload(canvas: HTMLCanvasElement, filename: string) {
   }, 'image/png');
 }
 
-/* ─── Browser Preview Components ─── */
+/* ─── 미리보기: Canvas 와 같은 규칙으로 ─── */
 
-function Dots({ index, total, accent }: { index: number; total: number; accent: string }) {
+/** 글자를 하나씩 span 으로 쪼개 같은 흔들림을 입힌다 */
+function Jittered({
+  runs,
+  strength,
+  emphasisScale = 1,
+}: {
+  runs: TextRun[];
+  strength: JitterStrength;
+  emphasisScale?: number;
+}) {
+  const seed = runs.map((r) => r.text).join('');
+  const chars: { ch: string; em: boolean }[] = [];
+  runs.forEach((r) => [...r.text].forEach((ch) => chars.push({ ch, em: r.emphasis })));
+  const jitters = jittersFor(seed, chars.length, strength);
+
   return (
-    <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5 pointer-events-none">
-      {Array.from({ length: total }).map((_, i) => (
-        <div key={i} className="rounded-full transition-all duration-200"
-          style={{ width: i === index ? 16 : 8, height: 8, background: i === index ? accent : 'rgba(255,255,255,0.3)' }} />
+    <>
+      {chars.map((c, i) => {
+        const j = jitters[i];
+        return (
+          <span
+            key={i}
+            style={{
+              display: c.ch === ' ' ? 'inline' : 'inline-block',
+              transform:
+                c.ch === ' '
+                  ? undefined
+                  : `rotate(${j.rot.toFixed(2)}deg) translateY(${(j.dy * 100).toFixed(2)}%) scale(${j.scale.toFixed(3)})`,
+              fontSize: c.em ? `${emphasisScale}em` : undefined,
+              color: c.em ? ACCENT : undefined,
+            }}
+          >
+            {c.ch === ' ' ? ' ' : c.ch}
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
+/** basePx 는 1080 기준 px. Canvas 와 같은 수식으로 cqw 를 만든다 */
+function HeadlinePreview({ raw, basePx }: { raw: string; basePx: number }) {
+  const lines = parseHeadline(raw.replace(/\\n/g, '\n'));
+  const scaled = basePx * fitScale(lines, (S * TEXT_UNITS) / basePx);
+  const size = `${pxToCqw(scaled).toFixed(2)}cqw`;
+  return (
+    <div style={{ fontFamily: `"${CANVAS_HEAD}", sans-serif`, fontSize: size, lineHeight: 1.32, color: INK }}>
+      {lines.map((runs, i) => (
+        <div key={i}>
+          <Jittered runs={runs} strength="strong" emphasisScale={EMPHASIS_SCALE} />
+        </div>
       ))}
     </div>
   );
 }
 
-/* ─── Slide Preview Components ─── */
-
-function CoverPreview({ slide, index, total }: { slide: InstagramSlide; index: number; total: number }) {
-  const bg = slide.background_color || '#1e3a5f';
-  const accent = slide.accent_color || '#60a5fa';
-  const tc = getTextColor(bg);
-  const sc = secondary(tc);
+function BodyPreview({ raw, size, color }: { raw: string; size: string; color: string }) {
+  const lines = raw.replace(/\\n/g, '\n').split('\n').filter((l) => l.trim());
   return (
-    <div className="w-full aspect-square relative flex flex-col items-center justify-center px-8 sm:px-12 overflow-hidden" style={{ background: bg }}>
-      <div className="absolute top-3 right-4 text-xs" style={{ color: sc }}>{index + 1} / {total}</div>
-      {slide.label && (
-        <p className="text-xs sm:text-sm font-medium tracking-widest mb-2" style={{ color: accent }}>
-          {slide.label}
-        </p>
-      )}
-      <h1 className="font-black text-center mb-3 sm:mb-4"
-        style={{ color: tc, fontSize: 'clamp(1.75rem, 7vw, 3.25rem)', lineHeight: 1.15, whiteSpace: 'pre-line' }}>
-        {slide.headline.replace(/\\n/g, '\n')}
-      </h1>
-      <div className="mb-3" style={{ background: accent, width: 72, height: 4, borderRadius: 2 }} />
-      {slide.body && (
-        <p className="text-xs sm:text-sm text-center leading-relaxed" style={{ color: sc }}>
-          {slide.body}
-        </p>
-      )}
-      <Dots index={index} total={total} accent={accent} />
-    </div>
-  );
-}
-
-function ContentPreview({ slide, index, total }: { slide: InstagramSlide; index: number; total: number }) {
-  const bg = slide.background_color || '#1e3a5f';
-  const accent = slide.accent_color || '#60a5fa';
-  const tc = getTextColor(bg);
-  const sc = secondary(tc);
-  const bodyFormatted = (slide.body || '').replace(/\\n/g, '\n');
-  const emoji = getKeywordEmoji(slide.keyword, index);
-
-  return (
-    <div className="w-full aspect-square relative flex flex-col overflow-hidden" style={{ background: bg }}>
-      <div className="absolute top-3 right-4 text-xs" style={{ color: sc }}>{index + 1} / {total}</div>
-
-      {/* Text content — vertically centered */}
-      <div className="flex flex-col justify-center flex-1 px-7 sm:px-9 py-8">
-        {/* Emoji + Keyword inline */}
-        <div className="flex items-center gap-2 mb-3 sm:mb-4">
-          <span style={{ fontSize: 'clamp(1.4rem, 5vw, 2rem)', lineHeight: 1 }}>{emoji}</span>
-          {slide.keyword && (
-            <p className="text-xs sm:text-sm font-bold tracking-wider uppercase" style={{ color: accent }}>
-              {slide.keyword}
-            </p>
-          )}
+    <div style={{ fontFamily: `"${CANVAS_BODY}", sans-serif`, fontSize: size, lineHeight: 1.42, color }}>
+      {lines.map((line, i) => (
+        <div key={i}>
+          <Jittered runs={[{ text: line, emphasis: false }]} strength="soft" />
         </div>
-        <h2 className="font-black leading-tight mb-2 sm:mb-3"
-          style={{ color: tc, fontSize: 'clamp(1.5rem, 6vw, 2.6rem)', lineHeight: 1.18, whiteSpace: 'pre-line' }}>
-          {slide.headline.replace(/\\n/g, '\n')}
-        </h2>
-        <div className="mb-3 sm:mb-4" style={{ background: accent, width: 40, height: 3, borderRadius: 2 }} />
-        {bodyFormatted && (
-          <p className="text-sm sm:text-base leading-relaxed whitespace-pre-line"
-            style={{ color: tc === '#ffffff' ? 'rgba(255,255,255,0.82)' : 'rgba(0,0,0,0.75)' }}>
-            {bodyFormatted}
-          </p>
-        )}
-      </div>
-
-      <Dots index={index} total={total} accent={accent} />
+      ))}
     </div>
   );
 }
 
-function StatPreview({ slide, index, total }: { slide: InstagramSlide; index: number; total: number }) {
-  const bg = slide.background_color || '#0a0a0a';
-  const accent = slide.accent_color || '#00c896';
-  const tc = getTextColor(bg);
-  const sc = secondary(tc);
-  const statEmoji = getStatEmoji(slide.stat_unit);
+const Slash = ({ flip }: { flip?: boolean }) => (
+  <svg width="4.2cqw" height="3.4cqw" viewBox="0 0 20 16" style={{ transform: flip ? 'scaleX(-1)' : undefined, flex: 'none' }}>
+    <g stroke={ACCENT} strokeWidth="2.4" strokeLinecap="round">
+      <path d="M3 3 L9 8" /><path d="M3 13 L9 8" /><path d="M10 3 L16 8" /><path d="M10 13 L16 8" />
+    </g>
+  </svg>
+);
+
+const Star = () => (
+  <svg width="4.6cqw" height="4.6cqw" viewBox="0 0 22 22">
+    <path d="M11 2 L13.6 8.4 L20.4 8.8 L15.2 13.2 L17 19.8 L11 16 L5 19.8 L6.8 13.2 L1.6 8.8 L8.4 8.4 Z"
+      fill="none" stroke={ACCENT} strokeWidth="2" strokeLinejoin="round" />
+  </svg>
+);
+
+const Pill = ({ text }: { text: string }) => (
+  <span style={{
+    display: 'inline-block', background: ACCENT, color: PAPER, borderRadius: 999,
+    fontFamily: `"${CANVAS_BODY}", sans-serif`, fontSize: '4.6cqw',
+    padding: '1.3cqw 4.8cqw', marginBottom: '3.4cqw',
+  }}>{text}</span>
+);
+
+function CardFrame({ children, index, total, showNumber = true }: {
+  children: React.ReactNode; index: number; total: number; showNumber?: boolean;
+}) {
   return (
-    <div className="w-full aspect-square relative flex flex-col p-6 sm:p-8 overflow-hidden" style={{ background: bg }}>
-      {/* Decorative sparkline */}
-      <svg className="absolute bottom-0 left-0 pointer-events-none" style={{ width: '70%', height: '40%', opacity: 0.22 }}
-        viewBox="0 0 300 140" preserveAspectRatio="none">
-        <path d="M10 125 C60 95 110 112 150 98 C190 84 240 62 290 32"
-          stroke={accent} strokeWidth="3" fill="none" strokeLinecap="round" />
-        {([[10, 125], [90, 106], [150, 98], [210, 88], [290, 32]] as [number, number][]).map(([x, y], i) => (
-          <circle key={i} cx={x} cy={y} r="5" fill={accent} />
-        ))}
-      </svg>
-
-      {slide.stat_badge && (
-        <span className="self-start text-xs font-bold px-2.5 py-1 rounded mb-auto relative z-10"
-          style={{ background: accent, color: bg }}>
-          {statEmoji}&nbsp;&nbsp;{slide.stat_badge}
-        </span>
+    <div
+      style={{
+        containerType: 'inline-size', width: '100%', aspectRatio: '1', background: PAPER,
+        position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', textAlign: 'center',
+      }}
+    >
+      {showNumber && (
+        <span style={{
+          position: 'absolute', top: '7cqw', right: '7cqw', fontSize: '3.1cqw',
+          color: INK_FAINT, fontFamily: `"${CANVAS_BODY}", sans-serif`,
+        }}>{index + 1} / {total}</span>
       )}
-      <div className="flex-1 flex flex-col justify-center relative z-10">
-        <div className="flex items-end gap-1 sm:gap-1.5 mb-2 sm:mb-3">
-          <span className="font-black leading-none"
-            style={{ color: accent, fontSize: 'clamp(3.25rem, 16vw, 6.5rem)' }}>
-            {slide.stat_value}
-          </span>
-          {slide.stat_unit && (
-            <span className="font-bold mb-0.5"
-              style={{ color: tc, fontSize: 'clamp(2rem, 10vw, 4rem)' }}>
-              {slide.stat_unit}
-            </span>
-          )}
-        </div>
-        <p className="text-sm sm:text-base font-medium" style={{ color: tc }}>{slide.headline}</p>
-        {slide.body && (
-          <p className="text-xs mt-1.5 leading-relaxed" style={{ color: sc }}>{slide.body}</p>
-        )}
-      </div>
-      {slide.source && (
-        <p className="text-xs relative z-10" style={{ color: sc }}>SOURCE · {slide.source}</p>
-      )}
-      <Dots index={index} total={total} accent={accent} />
-    </div>
-  );
-}
-
-function OutroPreview({ slide, index, total }: { slide: InstagramSlide; index: number; total: number }) {
-  const bg = slide.background_color || '#0d0d0d';
-  const accent = slide.accent_color || '#00c896';
-  const tc = getTextColor(bg);
-  const sc = secondary(tc);
-  return (
-    <div className="w-full aspect-square relative flex flex-col items-center justify-center px-7 sm:px-9 overflow-hidden" style={{ background: bg }}>
-      <div className="absolute bottom-0 left-0 pointer-events-none" style={{
-        width: '62%', height: '62%',
-        background: `radial-gradient(circle at 25% 80%, ${hexToRgba(accent, 0.55)} 0%, ${hexToRgba(accent, 0.18)} 45%, transparent 70%)`,
-        filter: 'blur(40px)', zIndex: 0,
-      }} />
-      <div className="absolute top-0 right-0 pointer-events-none" style={{
-        width: '45%', height: '45%',
-        background: `radial-gradient(circle at 75% 20%, ${hexToRgba(accent, 0.28)} 0%, transparent 65%)`,
-        filter: 'blur(30px)', zIndex: 0,
-      }} />
-
-      <div className="absolute top-3 right-4 text-xs" style={{ color: sc, zIndex: 1 }}>{index + 1} / {total}</div>
-
-      <div className="relative text-center flex flex-col items-center pb-6" style={{ zIndex: 1 }}>
-        <p className="text-xs font-semibold tracking-widest mb-3" style={{ color: 'rgba(255,255,255,0.38)' }}>
-          NEWSLETTER
-        </p>
-        <p className="font-semibold leading-snug mb-0.5" style={{ color: 'rgba(255,255,255,0.70)', fontSize: 'clamp(1rem, 4vw, 1.65rem)' }}>
-          매주 수요일 저녁,
-        </p>
-        <p className="font-black leading-snug mb-4" style={{ color: '#ffffff', fontSize: 'clamp(1.5rem, 6vw, 2.5rem)' }}>
-          메이커스노트
-        </p>
-        <p className="text-center leading-relaxed mb-3" style={{ color: 'rgba(255,255,255,0.88)', fontSize: 'clamp(0.78rem, 3vw, 1.05rem)' }}>
-          뉴스레터를 통해 매주 새로운 소식을 받아보세요
-        </p>
-        <p className="text-center mb-3" style={{ color: 'rgba(255,255,255,0.68)', fontSize: 'clamp(0.68rem, 2.5vw, 0.88rem)' }}>
-          프로필 링크 또는 &apos;메이커스노트&apos;를 검색해보세요.
-        </p>
-        <p className="text-center font-semibold" style={{ color: '#ffffff', fontSize: 'clamp(0.8rem, 2.8vw, 1rem)' }}>
-          maily.so/makersnote
-        </p>
-      </div>
-
-      <Dots index={index} total={total} accent={accent} />
+      <div style={{ width: '100%', padding: '0 7.5cqw' }}>{children}</div>
     </div>
   );
 }
 
 function SlidePreview({ slide, index, total }: { slide: InstagramSlide; index: number; total: number }) {
   const layout = slide.layout ?? (index === 0 ? 'cover' : 'content');
-  if (layout === 'cover')  return <CoverPreview   slide={slide} index={index} total={total} />;
-  if (layout === 'stat')   return <StatPreview    slide={slide} index={index} total={total} />;
-  if (layout === 'outro')  return <OutroPreview   slide={slide} index={index} total={total} />;
-  return                          <ContentPreview slide={slide} index={index} total={total} />;
+
+  if (layout === 'stat') {
+    return (
+      <CardFrame index={index} total={total} showNumber={false}>
+        <Pill text={slide.stat_badge || '수치'} />
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '2cqw',
+          fontFamily: `"${CANVAS_HEAD}", sans-serif`, lineHeight: 0.9 }}>
+          <span style={{ fontSize: '28cqw', color: ACCENT, display: 'inline-block' }}>
+            <Jittered runs={[{ text: slide.stat_value || '—', emphasis: false }]} strength="strong" />
+          </span>
+          {slide.stat_unit && <span style={{ fontSize: '12cqw', color: INK }}>{slide.stat_unit}</span>}
+        </div>
+        {slide.headline && (
+          <div style={{ marginTop: '4.6cqw' }}>
+            <BodyPreview raw={stripEmphasis(slide.headline)} size="4.6cqw" color={INK_SOFT} />
+          </div>
+        )}
+        {slide.source && (
+          <div style={{ marginTop: '2.4cqw' }}>
+            <BodyPreview raw={slide.source} size="3.4cqw" color={INK_FAINT} />
+          </div>
+        )}
+      </CardFrame>
+    );
+  }
+
+  if (layout === 'cover') {
+    return (
+      <CardFrame index={index} total={total}>
+        {slide.label && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
+            gap: '2.8cqw', marginBottom: '3.8cqw' }}>
+            <Slash />
+            <span style={{ fontFamily: `"${CANVAS_BODY}", sans-serif`, fontSize: '5cqw', color: INK }}>
+              <Jittered runs={[{ text: slide.label, emphasis: false }]} strength="soft" />
+            </span>
+            <Slash flip />
+          </div>
+        )}
+        <HeadlinePreview raw={slide.headline} basePx={HEAD_SIZE.cover} />
+        {slide.body && (
+          <div style={{ marginTop: '4.3cqw' }}>
+            <BodyPreview raw={slide.body} size="4.5cqw" color={INK_SOFT} />
+          </div>
+        )}
+        <div style={{ position: 'absolute', bottom: '6cqw', left: 0, right: 0, display: 'flex', justifyContent: 'center' }}>
+          <Star />
+        </div>
+      </CardFrame>
+    );
+  }
+
+  if (layout === 'outro') {
+    return (
+      <CardFrame index={index} total={total}>
+        <HeadlinePreview raw={slide.headline} basePx={HEAD_SIZE.outro} />
+        {slide.body && (
+          <div style={{ marginTop: '5cqw', position: 'relative', display: 'inline-block' }}>
+            <BodyPreview raw={slide.body} size="4.5cqw" color={INK_SOFT} />
+            <svg width="100%" height="1.4cqw" viewBox="0 0 150 10" preserveAspectRatio="none"
+              style={{ position: 'absolute', left: 0, bottom: '-2.2cqw' }}>
+              <path d="M3 6 C40 1, 110 1, 147 5" fill="none" stroke={ACCENT} strokeWidth="4" strokeLinecap="round" />
+            </svg>
+          </div>
+        )}
+        <div style={{ position: 'absolute', bottom: '6cqw', left: 0, right: 0, display: 'flex', justifyContent: 'center' }}>
+          <Star />
+        </div>
+      </CardFrame>
+    );
+  }
+
+  return (
+    <CardFrame index={index} total={total}>
+      {slide.keyword && <Pill text={slide.keyword} />}
+      <HeadlinePreview raw={slide.headline} basePx={HEAD_SIZE.content} />
+      {slide.body && (
+        <div style={{ marginTop: '4.6cqw' }}>
+          <BodyPreview raw={slide.body} size="4.3cqw" color={INK_SOFT} />
+        </div>
+      )}
+    </CardFrame>
+  );
 }
 
-/* ─── Main Component ─── */
+/* ─── 본체 ─── */
 
 export function InstagramCard({ post }: { post: InstagramPost }) {
   const [current, setCurrent] = useState(0);
   const [copiedCaption, setCopiedCaption] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const outroSlide: InstagramSlide = {
     slide_number: post.slides.length + 1,
     layout: 'outro',
-    headline: '매주 수요일 저녁,\n메이커스노트',
-    body: '뉴스레터에서 새로운 이야기를 보냅니다 ✉️',
-    background_color: '#0d0d0d',
-    accent_color: post.slides[0]?.accent_color || '#00c896',
+    headline: '매주 수요일 저녁,\n*메이커스노트*',
+    body: '뉴스레터에서 새로운 이야기를 보냅니다',
+    background_color: PAPER,
+    accent_color: ACCENT,
   };
 
   const slides = [...post.slides, outroSlide];
   const total = slides.length;
   const slide = slides[current];
 
-  function handleDownloadCurrent() {
-    triggerDownload(buildCanvas(slide, current, total), `instagram-slide-${current + 1}.png`);
+  /** 웹폰트가 준비되기 전에 그리면 PNG 만 시스템 폰트로 나온다 */
+  async function save(target: InstagramSlide, i: number) {
+    await waitForCardFonts();
+    triggerDownload(buildCanvas(target, i, total), `instagram-slide-${i + 1}.png`);
   }
 
-  function handleDownloadAll() {
-    slides.forEach((s, i) => {
-      setTimeout(() => triggerDownload(buildCanvas(s, i, total), `instagram-slide-${i + 1}.png`), i * 400);
-    });
+  async function handleDownloadCurrent() {
+    setSaving(true);
+    try { await save(slide, current); } finally { setSaving(false); }
+  }
+
+  async function handleDownloadAll() {
+    setSaving(true);
+    try {
+      await waitForCardFonts();
+      for (let i = 0; i < slides.length; i++) {
+        triggerDownload(buildCanvas(slides[i], i, total), `instagram-slide-${i + 1}.png`);
+        await new Promise((r) => setTimeout(r, 350));
+      }
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleCopyCaption() {
-    await navigator.clipboard.writeText(post.caption);
-    setCopiedCaption(true);
-    setTimeout(() => setCopiedCaption(false), 2000);
+    try {
+      await navigator.clipboard.writeText(post.caption);
+      setCopiedCaption(true);
+      setTimeout(() => setCopiedCaption(false), 2000);
+    } catch { /* 권한 없으면 조용히 넘어간다 */ }
   }
 
+  const act =
+    'text-[11px] font-bold uppercase tracking-[0.12em] underline underline-offset-4 ' +
+    'hover:no-underline disabled:opacity-35 disabled:cursor-not-allowed transition';
+
   return (
-    <div className="rounded-2xl border bg-gradient-to-br from-fuchsia-50 to-white border-fuchsia-200 shadow-sm overflow-hidden">
-      <div className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-4 border-b border-fuchsia-200">
-        <span className="text-sm sm:text-base font-bold px-3 py-1 rounded-full bg-fuchsia-100 text-fuchsia-700">
-          📸 Instagram
+    <article className="pb-5 border-b border-[var(--hair)]">
+      <div className="flex items-baseline gap-2.5 mb-3">
+        <h3 className="text-[11px] font-extrabold uppercase tracking-[0.2em] shrink-0" style={{ color: '#6e1b33' }}>
+          05 · Instagram
+        </h3>
+        <span className="flex-1 h-0.5 opacity-30 min-w-4" style={{ background: '#6e1b33' }} />
+        <span className="text-[11px] tracking-wider tabular-nums text-[var(--soft)] shrink-0">
+          {total}장
         </span>
-        <button
-          onClick={handleDownloadAll}
-          className="flex items-center gap-1.5 text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-white border border-gray-200 text-gray-600 hover:border-fuchsia-300 hover:text-fuchsia-600 active:scale-95 transition-all shadow-sm"
-        >
-          ⬇️ 전체 다운로드
-        </button>
       </div>
 
-      <div className="p-4 sm:p-5 space-y-4">
-        <div className="rounded-xl overflow-hidden shadow-md">
+      <div className="pl-3.5 border-l-[3px] min-w-0" style={{ borderColor: '#6e1b33' }}>
+        <div className="max-w-[420px]">
           <SlidePreview slide={slide} index={current} total={total} />
         </div>
 
-        <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4 mt-3">
+          <button type="button" onClick={() => setCurrent(Math.max(0, current - 1))}
+            disabled={current === 0} className={act}>← 이전</button>
+          <span className="text-[11px] tabular-nums text-[var(--soft)]">{current + 1} / {total}</span>
+          <button type="button" onClick={() => setCurrent(Math.min(total - 1, current + 1))}
+            disabled={current === total - 1} className={act}>다음 →</button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3.5 pt-2.5 border-t border-[var(--hair)]">
           <button
-            onClick={() => setCurrent(Math.max(0, current - 1))}
-            disabled={current === 0}
-            className="px-4 py-2 rounded-full bg-gray-100 text-gray-600 text-sm disabled:opacity-30 hover:bg-fuchsia-50 hover:text-fuchsia-600 transition-all"
+            type="button"
+            onClick={handleDownloadCurrent}
+            disabled={saving}
+            className="border-2 border-[var(--ink)] bg-[var(--ink)] text-[var(--card)] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] hover:bg-transparent hover:text-[var(--ink)] active:scale-[0.98] disabled:opacity-40 transition-all min-w-[96px]"
           >
-            ← 이전
+            {saving ? '저장 중…' : 'PNG 저장'}
           </button>
-          <span className="text-xs text-gray-400 tabular-nums">{current + 1} / {total}장</span>
-          <button
-            onClick={() => setCurrent(Math.min(total - 1, current + 1))}
-            disabled={current === total - 1}
-            className="px-4 py-2 rounded-full bg-gray-100 text-gray-600 text-sm disabled:opacity-30 hover:bg-fuchsia-50 hover:text-fuchsia-600 transition-all"
-          >
-            다음 →
+          <button type="button" onClick={handleDownloadAll} disabled={saving} className={act}>전체 저장</button>
+          <button type="button" onClick={handleCopyCaption} className={act}>
+            {copiedCaption ? '✓ 캡션 복사됨' : '캡션 복사'}
           </button>
         </div>
 
-        <button
-          onClick={handleDownloadCurrent}
-          className="w-full py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 hover:border-fuchsia-300 hover:text-fuchsia-600 hover:bg-fuchsia-50 transition-all"
-        >
-          📥 현재 슬라이드 PNG 저장 (1080×1080)
-        </button>
-      </div>
-
-      <div className="px-4 sm:px-5 pb-5 pt-1 border-t border-fuchsia-100">
-        <div className="flex items-center justify-between pt-3 mb-2">
-          <span className="text-sm font-semibold text-gray-700">본문 캡션</span>
-          <button
-            onClick={handleCopyCaption}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-white border border-gray-200 text-gray-600 hover:border-fuchsia-300 hover:text-fuchsia-600 active:scale-95 transition-all shadow-sm"
-          >
-            {copiedCaption ? '✅ 복사됨!' : '📋 복사'}
-          </button>
-        </div>
-        <p className="text-sm text-gray-600 whitespace-pre-wrap break-words leading-relaxed bg-gray-50 rounded-xl p-3">
+        <p className="mt-3.5 text-sm leading-[1.8] whitespace-pre-wrap break-words text-[var(--soft)]">
           {post.caption}
         </p>
-        <p className="text-xs text-gray-400 text-right mt-1 tabular-nums">{post.caption.length}자</p>
+        <p className="np-label mt-1.5 text-right">{post.caption.length}자</p>
       </div>
-    </div>
+    </article>
   );
 }
