@@ -91,6 +91,11 @@ export interface InstagramPost {
   title: string;
   slides: InstagramSlide[];
   caption: string;
+  /**
+   * 원문 레터 말미의 다음 편 예고를 카드 2줄로 줄인 것.
+   * 예고가 없는 글이면 비어 있다.
+   */
+  next_story?: string;
 }
 
 export interface InstagramPhotoSlide extends InstagramSlide {
@@ -101,6 +106,7 @@ export interface InstagramPhotoPost {
   title: string;
   slides: InstagramPhotoSlide[];
   caption: string;
+  next_story?: string;
 }
 
 /** 첫 생성 때 추출한 원문. 재생성 시 다시 긁지 않으려고 클라이언트가 들고 있는다 */

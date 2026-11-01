@@ -119,35 +119,31 @@ Example outputs:
   }
 }
 
+/**
+ * 슬라이드마다 쓸 이미지를 고른다.
+ *
+ * 원문 기사 이미지는 쓰지 않는다. Canvas 는 crossOrigin='anonymous' 로
+ * 불러오는데 임의의 기사 사이트는 CORS 헤더를 주지 않아 로드가 실패한다.
+ * 그러면 화면(<img>)에는 사진이 보이는데 내려받은 PNG 에는 빠지는,
+ * 눈에 띄지 않는 불일치가 생긴다. Unsplash 는 CORS 를 허용하고
+ * GPT 이미지는 data URI 라 둘 다 안전하다.
+ */
 export async function assignImagesToSlides(
   slides: Array<{ headline: string; keyword?: string; layout?: string }>,
-  articleImages: string[],
   unsplashKey?: string,
   openaiKey?: string
 ): Promise<string[]> {
   const imageUrls: string[] = [];
   const usedUrls = new Set<string>();
-  // Skip first article image (usually author profile/intro)
-  const usableArticleImages = articleImages.slice(1);
-  let articleIdx = 0;
 
   for (const slide of slides) {
-    // Skip outro slides
+    // 마무리 슬라이드는 사진 없이 간다
     if (slide.layout === 'outro') {
       imageUrls.push('');
       continue;
     }
 
-    // 1. Try article images (non-cover, first image already skipped)
-    if (slide.layout !== 'cover' && articleIdx < usableArticleImages.length) {
-      const url = usableArticleImages[articleIdx];
-      articleIdx++;
-      imageUrls.push(url);
-      usedUrls.add(url);
-      continue;
-    }
-
-    // 2. Try Unsplash with English keywords
+    // 1. Unsplash — 영문 키워드로 검색
     if (unsplashKey) {
       let searchQuery = slide.headline.replace(/\\n/g, ' ');
       if (openaiKey) {

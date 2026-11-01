@@ -157,8 +157,17 @@ stat:
       "accent_color": "#7ecef4"
     }
   ],
-  "caption": "해시태그 포함 270~330자 캡션"
+  "caption": "해시태그 포함 270~330자 캡션",
+  "next_story": "다음 편 예고를\\n두 줄로"
 }
+
+[next_story — 다음 편 예고]
+- 뉴스레터나 연재 글은 말미에 다음 편 예고를 3~4줄 적어두는 경우가 많다
+- 그런 예고가 본문에 있으면 카드에 들어갈 수 있게 2줄로 줄여라
+  · 한 줄 최대 13자, 줄바꿈은 \\n 사용, 반드시 2줄
+  · 가장 끌리는 단어 하나를 *별표*로 감싼다
+  · 예) "다음 편엔 *AI 툴*\\n고르는 기준 5가지"
+- 예고가 없으면 next_story 를 빈 문자열("")로 둔다. 지어내지 마라
 
 [강조 표시 — 중요]
 - cover 와 content 의 headline 에는 *별표*로 감싼 강조 구간이 정확히 1개 있어야 한다
@@ -201,7 +210,7 @@ export async function summarizeUrl(
   openaiImageKey?: string,
 ): Promise<SummarizeResponse> {
   try {
-    const { title, content, images } = await extractContent(url);
+    const { title, content } = await extractContent(url);
     const model = createModel(provider, apiKey);
 
     const textPlatforms = selectedPlatforms.filter((p): p is TextPlatform => p !== 'instagram' && p !== 'instagramPhoto');
@@ -287,10 +296,9 @@ export async function summarizeUrl(
           if (photoMatch) {
             const parsed = JSON.parse(photoMatch[0]) as InstagramPost;
             if (parsed.slides && Array.isArray(parsed.slides) && parsed.slides.length > 0) {
-              // Assign images to each slide
+              // 원문 기사 이미지는 쓰지 않는다 — image-sources 의 주석 참고
               const imageUrls = await assignImagesToSlides(
                 parsed.slides,
-                images,
                 unsplashKey,
                 openaiImageKey,
               );

@@ -1,73 +1,49 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { InstagramPhotoPost, InstagramPhotoSlide, InstagramSlide } from '@/lib/types';
+import { CANVAS_BODY, waitForCardFonts } from '@/lib/fonts';
+import { CARD_ACCENTS, DEFAULT_ACCENT, readStoredAccent, storeAccent } from '@/lib/card-theme';
+import { useHydrated } from '@/lib/use-hydrated';
+import { stripEmphasis } from '@/lib/handwriting';
+import {
+  PAPER, INK, INK_SOFT, INK_FAINT, S,
+  drawHeadline, headlineHeight, drawBody, bodyHeight,
+  drawChars, drawSlashes, drawSwoosh, drawInstaMark, drawPill, drawStat,
+} from '@/lib/card-canvas';
+import { HeadlinePreview, BodyPreview, Pill, Slash, InstaMark, CardFrame } from '@/components/CardParts';
 
-/* ─── Utilities ─── */
+/**
+ * 사진 카드.
+ *
+ * 사진을 카드 전체에 깔고 글자를 얹으면 사진이 밝거나 복잡할 때 바로 못 읽는다.
+ * 그래서 위 60% 는 종이(텍스트), 아래 40% 는 사진으로 나눈다. 글자가 사진 위에
+ * 올라가지 않으므로 스크림이 필요 없고, 일반 카드와 같은 타이포를 그대로 쓴다.
+ *
+ * 수치·마무리 슬라이드는 사진 없이 일반 카드와 동일하게 그린다 — 수치는 숫자가
+ * 주인공이라 60% 안에 다 들어가지 않고, 마무리는 안내 문구가 다섯 단이다.
+ */
+const PHOTO_RATIO = 0.4;
+const TEXT_H = S * (1 - PHOTO_RATIO);
 
-function hexToRgba(hex: string, alpha: number): string {
-  const h = (hex || '#000000').replace('#', '');
-  if (h.length < 6) return `rgba(0,0,0,${alpha})`;
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  return `rgba(${r},${g},${b},${alpha})`;
+/** 텍스트 영역이 좁으므로 일반 카드보다 한 단계 작게 */
+const PHOTO_HEAD = { cover: 112, content: 104 } as const;
+
+interface InstagramPhotoCardProps {
+  post: InstagramPhotoPost;
+  onImageChange: (slideIndex: number, newUrl: string, bgColor?: string) => void;
+  onRegenerateImage: (slideIndex: number, source: 'unsplash' | 'gpt') => void;
+  isRegenerating: boolean;
+  imageError: string | null;
 }
 
-const F = `"Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif`;
-
-/* ─── Emoji helpers ─── */
-
-const KEYWORD_EMOJI_MAP: [string[], string][] = [
-  [['배경', '역사', '기원', '히스토리', '유래'], '📖'],
-  [['핵심', '포인트', '요점', '주요', '중요'], '💡'],
-  [['결론', '마무리', '요약', '정리', 'cta', '저장'], '✅'],
-  [['전망', '미래', '앞으로', '예측', '방향'], '🚀'],
-  [['분석', '해석', '인사이트', '이해'], '🔍'],
-  [['방법', '전략', '방식', '솔루션', '해결', '접근'], '🎯'],
-  [['영향', '효과', '임팩트', '결과'], '⚡'],
-  [['데이터', '수치', '통계', '숫자', '지표'], '📊'],
-  [['기술', 'ai', '인공지능', 'tech', '도구'], '⚙️'],
-  [['트렌드', '동향', '현황', '변화', '흐름'], '🔄'],
-  [['문제', '이슈', '과제', '도전', '한계'], '⚠️'],
-  [['사람', '팀', '조직', '인재', '커뮤니티'], '👥'],
-  [['돈', '비용', '투자', '수익', '경제', '금융'], '💰'],
-  [['시간', '속도', '기간', '일정', '프로세스'], '⏱️'],
-  [['성장', '증가', '개선', '발전'], '📈'],
-  [['아이디어', '혁신', '창의', '상상'], '✨'],
-  [['글로벌', '세계', '해외', '국제'], '🌐'],
-  [['디자인', '브랜드', '비주얼'], '🎨'],
-  [['콘텐츠', '미디어', '소셜', '채널'], '📱'],
-];
-
-const FALLBACK_EMOJIS = ['✨', '💡', '🚀', '🎯', '⚡', '🔍', '📖', '🔄', '📊', '🌐'];
-
-function getKeywordEmoji(keyword: string | undefined, index: number): string {
-  if (keyword) {
-    const k = keyword.toLowerCase();
-    for (const [keys, emoji] of KEYWORD_EMOJI_MAP) {
-      if (keys.some(key => k.includes(key))) return emoji;
-    }
-  }
-  return FALLBACK_EMOJIS[index % FALLBACK_EMOJIS.length];
-}
-
-function getStatEmoji(unit?: string): string {
-  if (!unit) return '📈';
-  const u = unit.toLowerCase();
-  if (u === '%') return '📊';
-  if (['원', '억', '만', '달러', '$'].some(s => u.includes(s))) return '💰';
-  if (['분', '시간', '초', 'h', 'min'].some(s => u.includes(s))) return '⏱️';
-  if (['명', '개', '곳'].some(s => u.includes(s))) return '👥';
-  if (['배'].some(s => u.includes(s))) return '📈';
-  return '📊';
-}
-
-/* ─── Image loading helper ─── */
+/* ─── Canvas ─── */
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
+    // Unsplash 는 CORS 를 허용하고 GPT 이미지는 data URI 다.
+    // 원문 기사 이미지는 쓰지 않으므로 여기서 막힐 일이 없다.
     img.crossOrigin = 'anonymous';
     img.onload = () => resolve(img);
     img.onerror = reject;
@@ -75,375 +51,185 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-function wrapText(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  maxWidth: number,
-  maxLines = 10
-): string[] {
-  const lines: string[] = [];
-  const words = text.split(' ');
-  let cur = '';
-  for (const word of words) {
-    const test = cur ? `${cur} ${word}` : word;
-    if (ctx.measureText(test).width > maxWidth && cur) {
-      lines.push(cur);
-      if (lines.length >= maxLines) return lines;
-      cur = word;
-    } else {
-      cur = test;
-    }
-  }
-  if (cur) lines.push(cur);
-  return lines;
-}
-
-function splitLines(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  maxWidth: number,
-  maxLines: number
-): string[] {
-  const result: string[] = [];
-  const segments = text.replace(/\\n/g, '\n').split('\n').filter(s => s.trim());
-  for (const seg of segments) {
-    const wrapped = wrapText(ctx, seg.trim(), maxWidth, maxLines - result.length);
-    result.push(...wrapped);
-    if (result.length >= maxLines) break;
-  }
-  return result.slice(0, maxLines);
-}
-
-function roundRect(
-  ctx: CanvasRenderingContext2D,
-  x: number, y: number, w: number, h: number, r: number
-) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.arcTo(x + w, y, x + w, y + r, r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
-  ctx.lineTo(x + r, y + h);
-  ctx.arcTo(x, y + h, x, y + h - r, r);
-  ctx.lineTo(x, y + r);
-  ctx.arcTo(x, y, x + r, y, r);
-  ctx.closePath();
-}
-
-/* ─── Canvas drawing: Photo background + scrim ─── */
-
-function drawPhotoBackground(
-  ctx: CanvasRenderingContext2D,
-  img: HTMLImageElement,
-  S: number
-) {
-  // Cover-fill: crop to square center
-  const scale = Math.max(S / img.width, S / img.height);
+/** 아래 40% 에 사진을 꽉 채워 넣는다 (가운데 크롭) */
+function drawPhotoBand(ctx: CanvasRenderingContext2D, img: HTMLImageElement) {
+  const bandH = S * PHOTO_RATIO;
+  const scale = Math.max(S / img.width, bandH / img.height);
   const w = img.width * scale;
   const h = img.height * scale;
-  ctx.drawImage(img, (S - w) / 2, (S - h) / 2, w, h);
-}
-
-
-function drawScrim(ctx: CanvasRenderingContext2D, S: number, opacity = 0.7) {
-  const grad = ctx.createLinearGradient(0, 0, 0, S);
-  grad.addColorStop(0, `rgba(0,0,0,${opacity * 0.4})`);
-  grad.addColorStop(0.4, `rgba(0,0,0,${opacity * 0.65})`);
-  grad.addColorStop(1, `rgba(0,0,0,${opacity})`);
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, S, S);
-}
-
-/* ─── Canvas: Photo Cover ─── */
-
-function drawPhotoCover(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: number) {
-  // Text at bottom, white on dark scrim
-  const accent = slide.accent_color || '#7ecef4';
-  const PAD = 72;
-
-  ctx.textBaseline = 'alphabetic';
-  ctx.textAlign = 'left';
-
-  // Headline: 2 lines at bottom
-  const HL = 90, HL_LH = 108;
-  ctx.font = `900 ${HL}px ${F}`;
-  const hlLines = splitLines(ctx, slide.headline, S - PAD * 2, 3);
-
-  // Position: bottom half, ~18% up from bottom edge
-  const bottomY = S - Math.round(S * 0.18);
-  const startY = bottomY - (hlLines.length - 1) * HL_LH;
-
-  ctx.shadowColor = 'rgba(0,0,0,0.7)';
-  ctx.shadowBlur = 12;
-  ctx.shadowOffsetX = 0;
-  ctx.shadowOffsetY = 2;
-  hlLines.forEach((line, i) => {
-    ctx.fillStyle = i === hlLines.length - 1 ? accent : '#ffffff';
-    ctx.fillText(line, PAD, startY + i * HL_LH);
-  });
-  ctx.shadowColor = 'transparent';
-  ctx.shadowBlur = 0;
-
-  // Slide counter (top-right pill)
-
-}
-
-/* ─── Canvas: Photo Content ─── */
-
-function drawPhotoContent(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: number, index: number) {
-  const accent = slide.accent_color || '#7ecef4';
-  const emoji = getKeywordEmoji(slide.keyword, index);
-
-  // Measure for centering
-  const KW_FS = 34, EMOJI_FS = 48;
-  const HL = 72, HL_LH = 88;
-  const BODY_FS = 40, BODY_LH = 56;
-
-  ctx.font = `900 ${HL}px ${F}`;
-  const hlLines = splitLines(ctx, slide.headline, S - 160, 3);
-  const hlH = hlLines.length * HL_LH;
-
-  const rawBody = (slide.body || '').replace(/\\n/g, '\n');
-  ctx.font = `400 ${BODY_FS}px ${F}`;
-  const bodyLines: string[] = [];
-  for (const para of rawBody.split('\n').filter(Boolean)) {
-    bodyLines.push(...wrapText(ctx, para, S - 160, 4 - bodyLines.length));
-    if (bodyLines.length >= 4) break;
-  }
-  const bodyH = bodyLines.length * BODY_LH;
-
-  const kwRowH = Math.max(EMOJI_FS, KW_FS) + 4;
-  const totalH = kwRowH + 32 + hlH + 28 + bodyH;
-  let y = Math.max(120, Math.round((S - totalH) / 2));
-
-  ctx.textBaseline = 'middle';
-  ctx.textAlign = 'center';
-
-  // Emoji + keyword
-  const emojiMidY = y + kwRowH / 2;
-  ctx.font = `${EMOJI_FS}px serif`;
-  if (slide.keyword) {
-    ctx.font = `700 ${KW_FS}px ${F}`;
-    const kwW = ctx.measureText(slide.keyword).width;
-    ctx.font = `${EMOJI_FS}px serif`;
-    const emojiW = ctx.measureText(emoji).width;
-    const rowW = emojiW + 16 + kwW;
-    const startX = (S - rowW) / 2;
-    ctx.fillText(emoji, startX + emojiW / 2, emojiMidY);
-    ctx.font = `700 ${KW_FS}px ${F}`;
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(slide.keyword, startX + emojiW + 16 + kwW / 2, emojiMidY);
-  } else {
-    ctx.fillText(emoji, S / 2, emojiMidY);
-  }
-  y += kwRowH + 32;
-
-  // Headline
-  ctx.font = `900 ${HL}px ${F}`;
-  ctx.fillStyle = '#ffffff';
-  ctx.textBaseline = 'top';
-  hlLines.forEach((line, i) => ctx.fillText(line, S / 2, y + i * HL_LH));
-  y += hlH + 28;
-
-  // Body
-  if (bodyLines.length > 0) {
-    ctx.font = `400 ${BODY_FS}px ${F}`;
-    ctx.fillStyle = 'rgba(255,255,255,0.75)';
-    bodyLines.forEach((line, i) => ctx.fillText(line, S / 2, y + i * BODY_LH));
-  }
-
-
-}
-
-/* ─── Canvas: Photo Stat ─── */
-
-function drawPhotoStat(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: number) {
-  const accent = slide.accent_color || '#00c896';
-  const statEmoji = getStatEmoji(slide.stat_unit);
-
-  ctx.textBaseline = 'alphabetic';
-
-  // Badge pill (top-left)
-  if (slide.stat_badge) {
-    const FS = 30, PX = 22, PY = 12;
-    ctx.font = `700 ${FS}px ${F}`;
-    const badgeText = `${statEmoji}  ${slide.stat_badge}`;
-    const bw = ctx.measureText(badgeText).width + PX * 2;
-    const bh = FS + PY * 2;
-    ctx.fillStyle = accent;
-    roundRect(ctx, 80, 80, bw, bh, 8);
-    ctx.fill();
-    ctx.fillStyle = '#000000';
-    ctx.textAlign = 'left';
-    ctx.fillText(badgeText, 80 + PX, 80 + PY + FS * 0.8);
-  }
-
-  // Stat value + unit (centered)
-  const VAL_SIZE = 180, UNIT_SIZE = 120, GAP = 14;
-  ctx.font = `900 ${VAL_SIZE}px ${F}`;
-  const valW = slide.stat_value ? ctx.measureText(slide.stat_value).width : 0;
-  ctx.font = `700 ${UNIT_SIZE}px ${F}`;
-  const unitW = slide.stat_unit ? ctx.measureText(slide.stat_unit).width : 0;
-  const totalW = valW + (slide.stat_unit ? GAP + unitW : 0);
-  const startX = (S - totalW) / 2;
-  const baseY = S * 0.52;
-
-  if (slide.stat_value) {
-    ctx.font = `900 ${VAL_SIZE}px ${F}`;
-    ctx.fillStyle = accent;
-    ctx.textAlign = 'left';
-    ctx.fillText(slide.stat_value, startX, baseY);
-  }
-  if (slide.stat_unit) {
-    ctx.font = `700 ${UNIT_SIZE}px ${F}`;
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(slide.stat_unit, startX + valW + GAP, baseY + (VAL_SIZE - UNIT_SIZE) * 0.38);
-  }
-
-  if (slide.headline) {
-    ctx.textBaseline = 'top';
-    ctx.font = `400 44px ${F}`;
-    ctx.fillStyle = '#ffffff';
-    ctx.textAlign = 'center';
-    wrapText(ctx, slide.headline, S - 160, 2).forEach((line, i) => {
-      ctx.fillText(line, S / 2, baseY + 60 + i * 58);
-    });
-  }
-
-  if (slide.source) {
-    ctx.textBaseline = 'alphabetic';
-    ctx.font = `400 28px ${F}`;
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    ctx.textAlign = 'left';
-    ctx.fillText(`SOURCE · ${slide.source}`, 80, S - 80);
-  }
-
-
-}
-
-
-
-/* ─── Outro (reuse text-only style) ─── */
-
-function drawOutro(ctx: CanvasRenderingContext2D, slide: InstagramSlide, S: number) {
-  const accent = slide.accent_color;
-  const cx = S / 2;
-
   ctx.save();
-  ctx.filter = 'blur(60px)';
-  const glowBL = ctx.createRadialGradient(S * 0.12, S * 0.88, 0, S * 0.12, S * 0.88, 460);
-  glowBL.addColorStop(0, hexToRgba(accent, 0.55));
-  glowBL.addColorStop(0.5, hexToRgba(accent, 0.18));
-  glowBL.addColorStop(1, hexToRgba(accent, 0));
-  ctx.fillStyle = glowBL;
-  ctx.fillRect(0, 0, S, S);
-  const glowTR = ctx.createRadialGradient(S * 0.88, S * 0.12, 0, S * 0.88, S * 0.12, 260);
-  glowTR.addColorStop(0, hexToRgba(accent, 0.28));
-  glowTR.addColorStop(1, hexToRgba(accent, 0));
-  ctx.fillStyle = glowTR;
-  ctx.fillRect(0, 0, S, S);
-  ctx.filter = 'none';
+  ctx.beginPath();
+  ctx.rect(0, TEXT_H, S, bandH);
+  ctx.clip();
+  ctx.drawImage(img, (S - w) / 2, TEXT_H + (bandH - h) / 2, w, h);
   ctx.restore();
-
-  ctx.textBaseline = 'top';
-  ctx.textAlign = 'center';
-
-  let y = 285;
-
-  ctx.font = `500 30px ${F}`;
-  ctx.fillStyle = 'rgba(255,255,255,0.38)';
-  ctx.fillText('NEWSLETTER', cx, y);
-  y += 30 + 44;
-
-  ctx.font = `600 66px ${F}`;
-  ctx.fillStyle = 'rgba(255,255,255,0.70)';
-  ctx.fillText('매주 수요일 저녁,', cx, y);
-  y += 66 + 18;
-
-  ctx.font = `900 106px ${F}`;
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText('메이커스노트', cx, y);
-  y += 106 + 46;
-
-  ctx.font = `400 48px ${F}`;
-  ctx.fillStyle = 'rgba(255,255,255,0.88)';
-  const bodyLines = splitLines(ctx, '뉴스레터를 통해 매주 새로운 소식을 받아보세요', S - 180, 2);
-  bodyLines.forEach((line, i) => ctx.fillText(line, cx, y + i * 62));
-  y += bodyLines.length * 62 + 44;
-
-  ctx.font = `400 34px ${F}`;
-  ctx.fillStyle = 'rgba(255,255,255,0.68)';
-  ctx.fillText("프로필 링크 또는 '메이커스노트'를 검색해보세요.", cx, y);
-  y += 34 + 36;
-
-  ctx.font = `600 38px ${F}`;
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText('maily.so/makersnote', cx, y);
 }
 
-/* ─── Build photo canvas ─── */
+/** 사진이 없을 때 자리를 메우는 색 띠 */
+function drawPhotoFallback(ctx: CanvasRenderingContext2D, accent: string) {
+  ctx.save();
+  ctx.fillStyle = accent;
+  ctx.globalAlpha = 0.12;
+  ctx.fillRect(0, TEXT_H, S, S * PHOTO_RATIO);
+  ctx.restore();
+}
+
+function drawSplitCover(ctx: CanvasRenderingContext2D, slide: InstagramSlide, accent: string) {
+  const HL = PHOTO_HEAD.cover;
+  const eyebrowH = slide.label ? 54 + 40 : 0;
+  const hlH = headlineHeight(slide.headline, HL);
+  const bodyH = slide.body ? 42 + bodyHeight(slide.body, 46) : 0;
+
+  let y = Math.max(72, (TEXT_H - (eyebrowH + hlH + bodyH)) / 2);
+
+  if (slide.label) {
+    ctx.font = `54px "${CANVAS_BODY}"`;
+    const w = ctx.measureText(slide.label).width;
+    drawChars(ctx, [...slide.label].map((ch) => ({ ch, size: 54, color: INK_SOFT })),
+      slide.label, 'soft', S / 2, y + 44, CANVAS_BODY);
+    drawSlashes(ctx, S / 2 - w / 2 - 88, y + 26, 1, accent);
+    drawSlashes(ctx, S / 2 + w / 2 + 88, y + 26, -1, accent);
+    y += eyebrowH;
+  }
+
+  y += drawHeadline(ctx, slide.headline, y, HL, accent);
+  if (slide.body) {
+    y += 42;
+    drawBody(ctx, slide.body, y, 46, INK_SOFT);
+  }
+}
+
+function drawSplitContent(ctx: CanvasRenderingContext2D, slide: InstagramSlide, accent: string) {
+  const HL = PHOTO_HEAD.content;
+  const kwH = slide.keyword ? 82 + 36 : 0;
+  const hlH = headlineHeight(slide.headline, HL);
+  const bodyH = slide.body ? 44 + bodyHeight(slide.body, 44) : 0;
+
+  let y = Math.max(72, (TEXT_H - (kwH + hlH + bodyH)) / 2);
+
+  if (slide.keyword) {
+    drawPill(ctx, slide.keyword, S / 2, y, accent);
+    y += kwH;
+  }
+  y += drawHeadline(ctx, slide.headline, y, HL, accent);
+  if (slide.body) {
+    y += 44;
+    drawBody(ctx, slide.body, y, 44, INK_SOFT);
+  }
+}
+
+const NEXT_LABEL = 'NEXT STORY';
+const NEXT_CTA = '다음 편도 궁금하시다면\n팔로우해주세요';
+const NEXT_BODY = 'AI시대 유용한\n기획/디자인 팁들을 전달해드릴게요';
+const NEXT_HANDLE = '@mongle_ux';
+
+/**
+ * 사진 카드의 마무리 — 다음 편 예고.
+ *
+ * 강약: 예고 요약이 가장 크다. 독자가 팔로우할 이유가 거기서 나오기 때문이다.
+ * 팔로우 요청은 밑줄로 묶어 행동을 분리하고, 무엇을 받는지는 그 아래 보조로 둔다.
+ * 예고가 없는 글이면 요약 줄을 빼고 팔로우 요청이 헤드라인 자리를 차지한다.
+ */
+function drawNextStoryOutro(ctx: CanvasRenderingContext2D, nextStory: string, accent: string) {
+  const hasStory = nextStory.trim().length > 0;
+  const HL = hasStory ? 104 : 92;
+  const headline = hasStory ? nextStory : NEXT_CTA;
+
+  const labelH = 54 + 40;
+  const hlH = headlineHeight(headline, HL);
+  const ctaH = hasStory ? 46 + bodyHeight(NEXT_CTA, 48) : 0;
+  const bodyH = 40 + bodyHeight(NEXT_BODY, 42);
+  const markH = 104;
+  const handleH = 20 + bodyHeight(NEXT_HANDLE, 38);
+
+  let y = Math.max(96, (S - (labelH + hlH + ctaH + bodyH + markH + handleH)) / 2);
+
+  // 머리말
+  ctx.font = `54px "${CANVAS_BODY}"`;
+  const lw = ctx.measureText(NEXT_LABEL).width;
+  drawChars(ctx, [...NEXT_LABEL].map((ch) => ({ ch, size: 54, color: accent })),
+    NEXT_LABEL, 'soft', S / 2, y + 44, CANVAS_BODY);
+  drawSlashes(ctx, S / 2 - lw / 2 - 88, y + 26, 1, accent);
+  drawSlashes(ctx, S / 2 + lw / 2 + 88, y + 26, -1, accent);
+  y += labelH;
+
+  y += drawHeadline(ctx, headline, y, HL, accent);
+
+  if (hasStory) {
+    y += 46;
+    const h = drawBody(ctx, NEXT_CTA, y, 48, INK);
+    ctx.font = `48px "${CANVAS_BODY}"`;
+    const widest = Math.max(...NEXT_CTA.split('\n').map((l) => ctx.measureText(l).width));
+    drawSwoosh(ctx, S / 2, y + h + 26, Math.min(widest + 30, S - 150), accent);
+    y += h;
+  }
+
+  y += 40;
+  y += drawBody(ctx, NEXT_BODY, y, 42, INK_SOFT);
+
+  y += 52;
+  drawInstaMark(ctx, S / 2, y + 30, 30, accent);
+  y += markH;
+
+  y += 20;
+  drawBody(ctx, NEXT_HANDLE, y, 38, INK_FAINT);
+}
 
 async function buildPhotoCanvas(
   slide: InstagramPhotoSlide,
   index: number,
-  total: number
+  total: number,
+  accent: string,
+  nextStory: string,
 ): Promise<HTMLCanvasElement> {
-  const S = 1080;
   const canvas = document.createElement('canvas');
   canvas.width = S;
   canvas.height = S;
   const ctx = canvas.getContext('2d')!;
 
-  const layout = slide.layout ?? (index === 0 ? 'cover' : 'content');
+  ctx.fillStyle = PAPER;
+  ctx.fillRect(0, 0, S, S);
 
-  if (layout === 'outro') {
-    // Outro: solid background, no photo
-    ctx.fillStyle = slide.background_color || '#0d0d0d';
-    ctx.fillRect(0, 0, S, S);
-    drawOutro(ctx, slide, S);
-  } else {
-    // Photo background
+  const layout = slide.layout ?? (index === 0 ? 'cover' : 'content');
+  const withPhoto = layout === 'cover' || layout === 'content';
+
+  if (withPhoto) {
     if (slide.image_url) {
       try {
-        const img = await loadImage(slide.image_url);
-        drawPhotoBackground(ctx, img, S);
+        drawPhotoBand(ctx, await loadImage(slide.image_url));
       } catch {
-        // Fallback to solid color
-        ctx.fillStyle = slide.background_color || '#1e3a5f';
-        ctx.fillRect(0, 0, S, S);
+        drawPhotoFallback(ctx, accent); // 사진을 못 받아도 카드는 나온다
       }
     } else {
-      ctx.fillStyle = slide.background_color || '#1e3a5f';
-      ctx.fillRect(0, 0, S, S);
+      drawPhotoFallback(ctx, accent);
     }
-
-    // Scrim overlay
-    if (layout === 'cover') {
-      const grad = ctx.createLinearGradient(0, 0, 0, S);
-      grad.addColorStop(0, 'rgba(0,0,0,0.25)');
-      grad.addColorStop(0.35, 'rgba(0,0,0,0.4)');
-      grad.addColorStop(0.6, 'rgba(0,0,0,0.7)');
-      grad.addColorStop(1, 'rgba(0,0,0,0.92)');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, S, S);
-    } else {
-      drawScrim(ctx, S, 0.75);
-    }
-
-    // Draw text overlay
-    if (layout === 'cover')      drawPhotoCover(ctx, slide, S);
-    else if (layout === 'stat')  drawPhotoStat(ctx, slide, S);
-    else                         drawPhotoContent(ctx, slide, S, index);
+    if (layout === 'cover') drawSplitCover(ctx, slide, accent);
+    else drawSplitContent(ctx, slide, accent);
+  } else if (layout === 'stat') {
+    drawStat(ctx, slide, accent);
+  } else {
+    drawNextStoryOutro(ctx, nextStory, accent);
   }
 
-  // Slide counter (top-right pill)
-  ctx.textBaseline = 'top';
-  ctx.font = `500 30px ${F}`;
-  ctx.fillStyle = 'rgba(255,255,255,0.6)';
-  ctx.textAlign = 'right';
-  ctx.fillText(`${index + 1}/${total}`, S - 56, 56);
-
+  // 분할 카드는 텍스트 영역이 좁아 머리말과 번호가 같은 높이에서 부딪힌다.
+  // 사진 위 우하단으로 내리고, 사진이 밝아도 읽히도록 그림자를 깐다.
+  if (withPhoto) {
+    ctx.save();
+    ctx.font = `34px "${CANVAS_BODY}"`;
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.shadowColor = 'rgba(0,0,0,0.45)';
+    ctx.shadowBlur = 10;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(`${index + 1} / ${total}`, S - 54, S - 44);
+    ctx.restore();
+  } else if (layout !== 'stat') {
+    ctx.font = `34px "${CANVAS_BODY}"`;
+    ctx.fillStyle = INK_FAINT;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    ctx.fillText(`${index + 1} / ${total}`, S - 76, 76);
+  }
   return canvas;
 }
 
@@ -459,402 +245,286 @@ function triggerDownload(canvas: HTMLCanvasElement, filename: string) {
   }, 'image/png');
 }
 
-/* ─── Browser Preview Components ─── */
+/* ─── 미리보기 ─── */
 
-function Dots({ index, total, accent }: { index: number; total: number; accent: string }) {
+function SplitFrame({
+  slide, index, total, accent, children,
+}: {
+  slide: InstagramPhotoSlide; index: number; total: number; accent: string; children: React.ReactNode;
+}) {
   return (
-    <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5 pointer-events-none">
-      {Array.from({ length: total }).map((_, i) => (
-        <div key={i} className="rounded-full transition-all duration-200"
-          style={{ width: i === index ? 16 : 8, height: 8, background: i === index ? accent : 'rgba(255,255,255,0.3)' }} />
-      ))}
-    </div>
-  );
-}
+    <div
+      style={{
+        containerType: 'inline-size', width: '100%', aspectRatio: '1', background: PAPER,
+        position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column',
+      }}
+    >
+      <span style={{
+        position: 'absolute', bottom: '4.1cqw', right: '5cqw', fontSize: '3.1cqw', zIndex: 2,
+        color: 'rgba(255,255,255,0.92)', textShadow: '0 1px 6px rgba(0,0,0,0.45)',
+        fontFamily: `"${CANVAS_BODY}", sans-serif`,
+      }}>{index + 1} / {total}</span>
 
-/* Photo slide preview with image background */
+      <div style={{
+        height: `${(1 - PHOTO_RATIO) * 100}%`, display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '0 7.5cqw',
+      }}>
+        {children}
+      </div>
 
-function PhotoCoverPreview({ slide, index, total }: { slide: InstagramPhotoSlide; index: number; total: number }) {
-  const accent = slide.accent_color || '#7ecef4';
-  const hlParts = slide.headline.replace(/\\n/g, '\n').split('\n');
-  return (
-    <div className="w-full aspect-square relative flex flex-col justify-center overflow-hidden">
-      {/* Background image */}
-      {slide.image_url && (
-        <img src={slide.image_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
-      )}
-      {!slide.image_url && (
-        <div className="absolute inset-0" style={{ background: slide.background_color || '#1e3a5f' }} />
-      )}
-      {/* Gradient scrim — heavier at bottom */}
-      <div className="absolute inset-0" style={{
-        background: 'linear-gradient(to bottom, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.4) 35%, rgba(0,0,0,0.7) 60%, rgba(0,0,0,0.92) 100%)',
-      }} />
-      {/* Counter */}
-      <div className="absolute top-3 right-4 text-xs font-medium" style={{ color: 'rgba(255,255,255,0.6)' }}>
-        {index + 1}/{total}
-      </div>
-      {/* Headline — vertically centered in bottom half */}
-      <div className="relative z-10 px-6 sm:px-8 mt-auto" style={{ paddingBottom: '18%' }}>
-        {hlParts.map((line, i) => (
-          <p key={i} className="font-black leading-tight"
-            style={{
-              color: i === hlParts.length - 1 ? accent : '#ffffff',
-              fontSize: 'clamp(1.6rem, 7vw, 3rem)',
-              lineHeight: 1.15,
-              textShadow: '0 2px 12px rgba(0,0,0,0.7)',
-            }}>
-            {line}
-          </p>
-        ))}
-      </div>
-      <Dots index={index} total={total} accent={accent} />
-    </div>
-  );
-}
-
-function PhotoContentPreview({ slide, index, total }: { slide: InstagramPhotoSlide; index: number; total: number }) {
-  const accent = slide.accent_color || '#7ecef4';
-  const emoji = getKeywordEmoji(slide.keyword, index);
-  const bodyFormatted = (slide.body || '').replace(/\\n/g, '\n');
-  return (
-    <div className="w-full aspect-square relative flex flex-col items-center justify-center overflow-hidden">
-      {slide.image_url && (
-        <img src={slide.image_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
-      )}
-      {!slide.image_url && (
-        <div className="absolute inset-0" style={{ background: slide.background_color || '#1e3a5f' }} />
-      )}
-      <div className="absolute inset-0" style={{
-        background: 'linear-gradient(to bottom, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.65) 40%, rgba(0,0,0,0.75) 100%)',
-      }} />
-      <div className="absolute top-3 right-4 text-xs font-medium" style={{ color: 'rgba(255,255,255,0.6)' }}>
-        {index + 1}/{total}
-      </div>
-      <div className="relative z-10 text-center px-7 sm:px-9">
-        <div className="flex items-center justify-center gap-2 mb-3">
-          <span style={{ fontSize: 'clamp(1.4rem, 5vw, 2rem)', lineHeight: 1 }}>{emoji}</span>
-          {slide.keyword && (
-            <p className="text-xs sm:text-sm font-bold tracking-wider" style={{ color: '#ffffff' }}>
-              {slide.keyword}
-            </p>
-          )}
-        </div>
-        <h2 className="font-black leading-tight mb-3"
-          style={{ color: '#ffffff', fontSize: 'clamp(1.4rem, 5.5vw, 2.2rem)', lineHeight: 1.2, whiteSpace: 'pre-line' }}>
-          {slide.headline.replace(/\\n/g, '\n')}
-        </h2>
-        {bodyFormatted && (
-          <p className="text-sm sm:text-base leading-relaxed whitespace-pre-line"
-            style={{ color: 'rgba(255,255,255,0.75)' }}>
-            {bodyFormatted}
-          </p>
+      <div style={{ height: `${PHOTO_RATIO * 100}%`, background: `${accent}1f`, overflow: 'hidden' }}>
+        {slide.image_url && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={slide.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
         )}
       </div>
-      <Dots index={index} total={total} accent={accent} />
     </div>
   );
 }
 
-function PhotoStatPreview({ slide, index, total }: { slide: InstagramPhotoSlide; index: number; total: number }) {
-  const accent = slide.accent_color || '#00c896';
-  const statEmoji = getStatEmoji(slide.stat_unit);
+function NextStoryPreview({ nextStory, accent }: { nextStory: string; accent: string }) {
+  const hasStory = nextStory.trim().length > 0;
   return (
-    <div className="w-full aspect-square relative flex flex-col p-6 sm:p-8 overflow-hidden">
-      {slide.image_url && (
-        <img src={slide.image_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
-      )}
-      {!slide.image_url && (
-        <div className="absolute inset-0" style={{ background: slide.background_color || '#0a0a0a' }} />
-      )}
-      <div className="absolute inset-0" style={{
-        background: 'linear-gradient(to bottom, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.65) 40%, rgba(0,0,0,0.75) 100%)',
-      }} />
-      <div className="absolute top-3 right-4 text-xs font-medium" style={{ color: 'rgba(255,255,255,0.6)' }}>
-        {index + 1}/{total}
-      </div>
-      {slide.stat_badge && (
-        <span className="self-start text-xs font-bold px-2.5 py-1 rounded relative z-10 mb-auto"
-          style={{ background: accent, color: '#000000' }}>
-          {statEmoji}&nbsp;&nbsp;{slide.stat_badge}
+    <CardFrame index={0} total={0} showNumber={false}>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        gap: '2.8cqw', marginBottom: '3.4cqw',
+      }}>
+        <Slash accent={accent} />
+        <span style={{ fontFamily: `"${CANVAS_BODY}", sans-serif`, fontSize: '5cqw', color: accent }}>
+          {NEXT_LABEL}
         </span>
-      )}
-      <div className="flex-1 flex flex-col justify-center relative z-10">
-        <div className="flex items-end gap-1 sm:gap-1.5 mb-2 sm:mb-3">
-          <span className="font-black leading-none"
-            style={{ color: accent, fontSize: 'clamp(3rem, 14vw, 5.5rem)' }}>
-            {slide.stat_value}
-          </span>
-          {slide.stat_unit && (
-            <span className="font-bold mb-0.5"
-              style={{ color: '#ffffff', fontSize: 'clamp(1.8rem, 8vw, 3.5rem)' }}>
-              {slide.stat_unit}
-            </span>
-          )}
+        <Slash flip accent={accent} />
+      </div>
+
+      <HeadlinePreview raw={hasStory ? nextStory : NEXT_CTA} basePx={hasStory ? 104 : 92} accent={accent} />
+
+      {hasStory && (
+        <div style={{ marginTop: '4.3cqw', position: 'relative', display: 'inline-block' }}>
+          <BodyPreview raw={NEXT_CTA} basePx={48} color={INK} />
+          <svg width="100%" height="1.3cqw" viewBox="0 0 150 10" preserveAspectRatio="none"
+            style={{ position: 'absolute', left: 0, bottom: '-2.4cqw' }}>
+            <path d="M3 6 C40 1, 110 1, 147 5" fill="none" stroke={accent} strokeWidth="4" strokeLinecap="round" />
+          </svg>
         </div>
-        <p className="text-sm sm:text-base font-medium" style={{ color: '#ffffff' }}>{slide.headline}</p>
-      </div>
-      {slide.source && (
-        <p className="text-xs relative z-10" style={{ color: 'rgba(255,255,255,0.5)' }}>SOURCE · {slide.source}</p>
       )}
-      <Dots index={index} total={total} accent={accent} />
-    </div>
+
+      <div style={{ marginTop: '3.7cqw' }}>
+        <BodyPreview raw={NEXT_BODY} basePx={42} color={INK_SOFT} />
+      </div>
+
+      <div style={{ marginTop: '4.8cqw', display: 'flex', justifyContent: 'center' }}>
+        <InstaMark accent={accent} />
+      </div>
+      <div style={{ marginTop: '1.9cqw' }}>
+        <BodyPreview raw={NEXT_HANDLE} basePx={38} color={INK_FAINT} />
+      </div>
+    </CardFrame>
   );
 }
 
-function OutroPreview({ slide, index, total }: { slide: InstagramPhotoSlide; index: number; total: number }) {
-  const bg = slide.background_color || '#0d0d0d';
-  const accent = slide.accent_color || '#00c896';
-  return (
-    <div className="w-full aspect-square relative flex flex-col items-center justify-center px-7 sm:px-9 overflow-hidden" style={{ background: bg }}>
-      <div className="absolute bottom-0 left-0 pointer-events-none" style={{
-        width: '62%', height: '62%',
-        background: `radial-gradient(circle at 25% 80%, ${hexToRgba(accent, 0.55)} 0%, ${hexToRgba(accent, 0.18)} 45%, transparent 70%)`,
-        filter: 'blur(40px)', zIndex: 0,
-      }} />
-      <div className="absolute top-0 right-0 pointer-events-none" style={{
-        width: '45%', height: '45%',
-        background: `radial-gradient(circle at 75% 20%, ${hexToRgba(accent, 0.28)} 0%, transparent 65%)`,
-        filter: 'blur(30px)', zIndex: 0,
-      }} />
-      <div className="absolute top-3 right-4 text-xs font-medium" style={{ color: 'rgba(255,255,255,0.5)', zIndex: 1 }}>
-        {index + 1}/{total}
-      </div>
-      <div className="relative text-center flex flex-col items-center pb-6" style={{ zIndex: 1 }}>
-        <p className="text-xs font-semibold tracking-widest mb-3" style={{ color: 'rgba(255,255,255,0.38)' }}>
-          NEWSLETTER
-        </p>
-        <p className="font-semibold leading-snug mb-0.5" style={{ color: 'rgba(255,255,255,0.70)', fontSize: 'clamp(1rem, 4vw, 1.65rem)' }}>
-          매주 수요일 저녁,
-        </p>
-        <p className="font-black leading-snug mb-4" style={{ color: '#ffffff', fontSize: 'clamp(1.5rem, 6vw, 2.5rem)' }}>
-          메이커스노트
-        </p>
-        <p className="text-center leading-relaxed mb-3" style={{ color: 'rgba(255,255,255,0.88)', fontSize: 'clamp(0.78rem, 3vw, 1.05rem)' }}>
-          뉴스레터를 통해 매주 새로운 소식을 받아보세요
-        </p>
-        <p className="text-center mb-3" style={{ color: 'rgba(255,255,255,0.68)', fontSize: 'clamp(0.68rem, 2.5vw, 0.88rem)' }}>
-          프로필 링크 또는 &apos;메이커스노트&apos;를 검색해보세요.
-        </p>
-        <p className="text-center font-semibold" style={{ color: '#ffffff', fontSize: 'clamp(0.8rem, 2.8vw, 1rem)' }}>
-          maily.so/makersnote
-        </p>
-      </div>
-      <Dots index={index} total={total} accent={accent} />
-    </div>
-  );
-}
-
-function PhotoSlidePreview({ slide, index, total }: { slide: InstagramPhotoSlide; index: number; total: number }) {
+function PhotoSlidePreview({
+  slide, index, total, accent, nextStory,
+}: { slide: InstagramPhotoSlide; index: number; total: number; accent: string; nextStory: string }) {
   const layout = slide.layout ?? (index === 0 ? 'cover' : 'content');
-  if (layout === 'cover')  return <PhotoCoverPreview  slide={slide} index={index} total={total} />;
-  if (layout === 'stat')   return <PhotoStatPreview   slide={slide} index={index} total={total} />;
-  if (layout === 'outro')  return <OutroPreview       slide={slide} index={index} total={total} />;
-  return                          <PhotoContentPreview slide={slide} index={index} total={total} />;
+
+  if (layout === 'outro') return <NextStoryPreview nextStory={nextStory} accent={accent} />;
+
+  if (layout === 'stat') {
+    return (
+      <CardFrame index={index} total={total} showNumber={false}>
+        <Pill text={slide.stat_badge || '수치'} accent={accent} />
+        <div style={{
+          display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '2cqw',
+          fontFamily: 'var(--font-ig-head)', lineHeight: 0.9,
+        }}>
+          <span style={{ fontSize: '28cqw', color: accent, display: 'inline-block' }}>
+            {slide.stat_value || '—'}
+          </span>
+          {slide.stat_unit && <span style={{ fontSize: '12cqw' }}>{slide.stat_unit}</span>}
+        </div>
+        {slide.headline && (
+          <div style={{ marginTop: '4.6cqw' }}>
+            <BodyPreview raw={stripEmphasis(slide.headline)} basePx={50} color={INK_SOFT} />
+          </div>
+        )}
+        {slide.source && (
+          <div style={{ marginTop: '2.4cqw' }}>
+            <BodyPreview raw={slide.source} basePx={37} color={INK_FAINT} />
+          </div>
+        )}
+      </CardFrame>
+    );
+  }
+
+  if (layout === 'cover') {
+    return (
+      <SplitFrame slide={slide} index={index} total={total} accent={accent}>
+        {slide.label && (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            gap: '2.8cqw', marginBottom: '3.4cqw',
+          }}>
+            <Slash accent={accent} />
+            <span style={{ fontFamily: `"${CANVAS_BODY}", sans-serif`, fontSize: '5cqw', color: INK_SOFT }}>
+              {slide.label}
+            </span>
+            <Slash flip accent={accent} />
+          </div>
+        )}
+        <HeadlinePreview raw={slide.headline} basePx={PHOTO_HEAD.cover} accent={accent} />
+        {slide.body && (
+          <div style={{ marginTop: '3.9cqw' }}>
+            <BodyPreview raw={slide.body} basePx={46} color={INK_SOFT} />
+          </div>
+        )}
+      </SplitFrame>
+    );
+  }
+
+  return (
+    <SplitFrame slide={slide} index={index} total={total} accent={accent}>
+      {slide.keyword && <Pill text={slide.keyword} accent={accent} />}
+      <HeadlinePreview raw={slide.headline} basePx={PHOTO_HEAD.content} accent={accent} />
+      {slide.body && (
+        <div style={{ marginTop: '4.1cqw' }}>
+          <BodyPreview raw={slide.body} basePx={44} color={INK_SOFT} />
+        </div>
+      )}
+    </SplitFrame>
+  );
 }
 
-/* ─── Main Component ─── */
+/* ─── 본체 ─── */
 
-const SOLID_PRESETS = [
-  { color: '#1e3a5f', label: '네이비' },
-  { color: '#0d0d0d', label: '블랙' },
-  { color: '#2d3436', label: '차콜' },
-  { color: '#1a472a', label: '그린' },
-  { color: '#4a1942', label: '퍼플' },
-  { color: '#8b4513', label: '브라운' },
-  { color: '#2c3e50', label: '슬레이트' },
-  { color: '#c0392b', label: '레드' },
-];
-
-interface InstagramPhotoCardProps {
-  post: InstagramPhotoPost;
-  onImageChange?: (slideIndex: number, newUrl: string, bgColor?: string) => void;
-  onRegenerateImage?: (slideIndex: number, source: 'unsplash' | 'gpt') => Promise<void>;
-  isRegenerating?: boolean;
-  imageError?: string | null;
-}
-
-export function InstagramPhotoCard({ post, onImageChange, onRegenerateImage, isRegenerating, imageError }: InstagramPhotoCardProps) {
+export function InstagramPhotoCard({
+  post, onRegenerateImage, isRegenerating, imageError,
+}: InstagramPhotoCardProps) {
   const [current, setCurrent] = useState(0);
   const [copiedCaption, setCopiedCaption] = useState(false);
-  const [showImageMenu, setShowImageMenu] = useState(false);
-  const [showColorPicker, setShowColorPicker] = useState(false);
-  const [urlInput, setUrlInput] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const hydrated = useHydrated();
+  const stored = useMemo(() => (hydrated ? readStoredAccent() : DEFAULT_ACCENT), [hydrated]);
+  const [picked, setPicked] = useState<string | null>(null);
+  const accent = picked ?? stored;
+
+  // 다음 편 예고는 원문 레터 말미에서 AI 가 뽑아 2줄로 줄인 것이다.
+  // 없는 글이면 빈 문자열이고, 그때는 팔로우 요청이 헤드라인 자리로 올라간다.
+  const nextStory = (post.next_story || '').trim();
 
   const outroSlide: InstagramPhotoSlide = {
     slide_number: post.slides.length + 1,
     layout: 'outro',
-    headline: '매주 수요일 저녁,\n메이커스노트',
-    body: '뉴스레터에서 새로운 이야기를 보냅니다',
-    background_color: '#0d0d0d',
-    accent_color: post.slides[0]?.accent_color || '#00c896',
+    headline: nextStory,
+    background_color: PAPER,
+    accent_color: accent,
     image_url: '',
   };
 
   const slides = [...post.slides, outroSlide];
   const total = slides.length;
   const slide = slides[current];
+  const layout = slide.layout ?? (current === 0 ? 'cover' : 'content');
+  const canSwapPhoto = layout === 'cover' || layout === 'content';
+
+  async function save(target: InstagramPhotoSlide, i: number) {
+    await waitForCardFonts();
+    triggerDownload(await buildPhotoCanvas(target, i, total, accent, nextStory), `photo-slide-${i + 1}.png`);
+  }
 
   async function handleDownloadCurrent() {
-    const canvas = await buildPhotoCanvas(slide, current, total);
-    triggerDownload(canvas, `instagram-photo-slide-${current + 1}.png`);
+    setSaving(true);
+    try { await save(slide, current); } finally { setSaving(false); }
   }
 
   async function handleDownloadAll() {
-    for (let i = 0; i < slides.length; i++) {
-      const canvas = await buildPhotoCanvas(slides[i], i, total);
-      triggerDownload(canvas, `instagram-photo-slide-${i + 1}.png`);
-      // Small delay between downloads
-      if (i < slides.length - 1) await new Promise(r => setTimeout(r, 500));
-    }
+    setSaving(true);
+    try {
+      await waitForCardFonts();
+      for (let i = 0; i < slides.length; i++) {
+        triggerDownload(await buildPhotoCanvas(slides[i], i, total, accent, nextStory), `photo-slide-${i + 1}.png`);
+        await new Promise((r) => setTimeout(r, 350));
+      }
+    } finally { setSaving(false); }
   }
 
   async function handleCopyCaption() {
-    await navigator.clipboard.writeText(post.caption);
-    setCopiedCaption(true);
-    setTimeout(() => setCopiedCaption(false), 2000);
+    try {
+      await navigator.clipboard.writeText(post.caption);
+      setCopiedCaption(true);
+      setTimeout(() => setCopiedCaption(false), 2000);
+    } catch { /* 권한 없으면 조용히 넘어간다 */ }
   }
 
+  const act =
+    'text-[11px] font-bold uppercase tracking-[0.12em] underline underline-offset-4 ' +
+    'hover:no-underline disabled:opacity-35 disabled:cursor-not-allowed transition';
+
   return (
-    <div className="rounded-2xl border bg-gradient-to-br from-violet-50 to-white border-violet-200 shadow-sm overflow-hidden">
-      <div className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-4 border-b border-violet-200">
-        <span className="text-sm sm:text-base font-bold px-3 py-1 rounded-full bg-violet-100 text-violet-700">
-          🖼️ Instagram w/photo
-        </span>
-        <button
-          onClick={handleDownloadAll}
-          className="flex items-center gap-1.5 text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-white border border-gray-200 text-gray-600 hover:border-violet-300 hover:text-violet-600 active:scale-95 transition-all shadow-sm"
-        >
-          ⬇️ 전체 다운로드
-        </button>
+    <article className="pb-5 border-b border-[var(--hair)]">
+      <div className="flex items-baseline gap-2.5 mb-3">
+        <h3 className="text-[11px] font-extrabold uppercase tracking-[0.2em] shrink-0" style={{ color: '#6e1b33' }}>
+          06 · 사진 카드
+        </h3>
+        <span className="flex-1 h-0.5 opacity-30 min-w-4" style={{ background: '#6e1b33' }} />
+        <span className="text-[11px] tracking-wider tabular-nums text-[var(--soft)] shrink-0">{total}장</span>
       </div>
 
-      <div className="p-4 sm:p-5 space-y-4">
-        <div className="rounded-xl overflow-hidden shadow-md">
-          <PhotoSlidePreview slide={slide} index={current} total={total} />
+      <div className="pl-3.5 border-l-[3px] min-w-0" style={{ borderColor: '#6e1b33' }}>
+        <div className="max-w-[420px]">
+          <PhotoSlidePreview slide={slide} index={current} total={total} accent={accent} nextStory={nextStory} />
         </div>
 
-        {/* 이미지 교체 — outro 제외 */}
-        {slide.layout !== 'outro' && onRegenerateImage && (
-          <div className="space-y-2">
-            {!showImageMenu ? (
-              <button
-                onClick={() => setShowImageMenu(true)}
-                className="w-full py-2 rounded-xl border border-dashed border-gray-300 text-xs text-gray-400 hover:border-violet-300 hover:text-violet-500 transition-all"
-              >
-                🔄 배경 이미지 교체
-              </button>
-            ) : (
-              <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-3 space-y-2">
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => { onRegenerateImage(current, 'unsplash'); setShowImageMenu(false); }}
-                    disabled={isRegenerating}
-                    className="flex-1 py-2 rounded-lg bg-white border border-gray-200 text-xs font-medium text-gray-600 hover:border-violet-300 hover:text-violet-600 disabled:opacity-40 transition-all"
-                  >
-                    📷 Unsplash
-                  </button>
-                  <button
-                    onClick={() => { onRegenerateImage(current, 'gpt'); setShowImageMenu(false); }}
-                    disabled={isRegenerating}
-                    className="flex-1 py-2 rounded-lg bg-white border border-gray-200 text-xs font-medium text-gray-600 hover:border-violet-300 hover:text-violet-600 disabled:opacity-40 transition-all"
-                  >
-                    🤖 GPT 생성
-                  </button>
-                  <button
-                    onClick={() => setShowColorPicker(!showColorPicker)}
-                    className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-all ${showColorPicker ? 'bg-violet-100 border-violet-300 text-violet-700' : 'bg-white border-gray-200 text-gray-600 hover:border-violet-300 hover:text-violet-600'}`}
-                  >
-                    🎨 단색 배경
-                  </button>
-                </div>
-                {showColorPicker && (
-                  <div className="flex gap-1.5 flex-wrap">
-                    {SOLID_PRESETS.map((p) => (
-                      <button
-                        key={p.color}
-                        onClick={() => { if (onImageChange) { onImageChange(current, '', p.color); } setShowImageMenu(false); setShowColorPicker(false); }}
-                        className="w-8 h-8 rounded-lg border-2 border-white shadow-sm hover:scale-110 hover:border-violet-400 transition-all"
-                        style={{ background: p.color }}
-                        title={p.label}
-                      />
-                    ))}
-                  </div>
-                )}
-                <div className="flex gap-2">
-                  <input
-                    type="url"
-                    value={urlInput}
-                    onChange={(e) => setUrlInput(e.target.value)}
-                    placeholder="이미지 URL 직접 입력"
-                    className="flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-base text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-400"
-                  />
-                  <button
-                    onClick={() => { if (urlInput && onImageChange) { onImageChange(current, urlInput); setUrlInput(''); setShowImageMenu(false); } }}
-                    disabled={!urlInput}
-                    className="px-3 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-medium disabled:opacity-40 hover:bg-violet-700 transition-all"
-                  >
-                    적용
-                  </button>
-                </div>
-                <button
-                  onClick={() => setShowImageMenu(false)}
-                  className="w-full text-xs text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  닫기
-                </button>
-              </div>
-            )}
-            {isRegenerating && (
-              <p className="text-xs text-violet-500 text-center animate-pulse">이미지 생성 중...</p>
-            )}
-            {imageError && !isRegenerating && (
-              <p className="text-xs text-red-500 text-center">⚠️ {imageError}</p>
-            )}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-3 mt-3">
+          <button type="button" onClick={() => setCurrent(Math.max(0, current - 1))}
+            disabled={current === 0} className={act}>← 이전</button>
+          <span className="text-[11px] tabular-nums text-[var(--soft)]">{current + 1} / {total}</span>
+          <button type="button" onClick={() => setCurrent(Math.min(total - 1, current + 1))}
+            disabled={current === total - 1} className={act}>다음 →</button>
+
+          <div className="flex items-center gap-2 ml-auto" role="group" aria-label="키 컬러">
+            <span className="np-label">키 컬러</span>
+            {CARD_ACCENTS.map((a) => {
+              const on = accent === a.value;
+              return (
+                <button key={a.key} type="button" title={a.label} aria-label={a.label} aria-pressed={on}
+                  onClick={() => { setPicked(a.value); storeAccent(a.value); }}
+                  className={`w-5 h-5 rounded-full transition-transform ${on ? 'scale-110' : 'hover:scale-105'}`}
+                  style={{ background: a.value, boxShadow: on ? `0 0 0 2px var(--paper), 0 0 0 4px ${a.value}` : 'none' }} />
+              );
+            })}
+          </div>
+        </div>
+
+        {canSwapPhoto && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3">
+            <span className="np-label">사진 교체</span>
+            <button type="button" onClick={() => onRegenerateImage(current, 'unsplash')}
+              disabled={isRegenerating} className={act}>Unsplash</button>
+            <button type="button" onClick={() => onRegenerateImage(current, 'gpt')}
+              disabled={isRegenerating} className={act}>AI 생성</button>
+            {isRegenerating && <span className="text-[11px] text-[var(--soft)]">가져오는 중…</span>}
           </div>
         )}
+        {imageError && <p className="mt-2 text-xs text-[#8a2a12] break-words">⚠ {imageError}</p>}
 
-        <div className="flex items-center justify-between">
-          <button
-            onClick={() => setCurrent(Math.max(0, current - 1))}
-            disabled={current === 0}
-            className="px-4 py-2 rounded-full bg-gray-100 text-gray-600 text-sm disabled:opacity-30 hover:bg-violet-50 hover:text-violet-600 transition-all"
-          >
-            ← 이전
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3.5 pt-2.5 border-t border-[var(--hair)]">
+          <button type="button" onClick={handleDownloadCurrent} disabled={saving}
+            className="border-2 border-[var(--ink)] bg-[var(--ink)] text-[var(--card)] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] hover:bg-transparent hover:text-[var(--ink)] active:scale-[0.98] disabled:opacity-40 transition-all min-w-[96px]">
+            {saving ? '저장 중…' : 'PNG 저장'}
           </button>
-          <span className="text-xs text-gray-400 tabular-nums">{current + 1} / {total}장</span>
-          <button
-            onClick={() => setCurrent(Math.min(total - 1, current + 1))}
-            disabled={current === total - 1}
-            className="px-4 py-2 rounded-full bg-gray-100 text-gray-600 text-sm disabled:opacity-30 hover:bg-violet-50 hover:text-violet-600 transition-all"
-          >
-            다음 →
+          <button type="button" onClick={handleDownloadAll} disabled={saving} className={act}>전체 저장</button>
+          <button type="button" onClick={handleCopyCaption} className={act}>
+            {copiedCaption ? '✓ 캡션 복사됨' : '캡션 복사'}
           </button>
         </div>
 
-        <button
-          onClick={handleDownloadCurrent}
-          className="w-full py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 hover:border-violet-300 hover:text-violet-600 hover:bg-violet-50 transition-all"
-        >
-          📥 현재 슬라이드 PNG 저장 (1080×1080)
-        </button>
-      </div>
-
-      <div className="px-4 sm:px-5 pb-5 pt-1 border-t border-violet-100">
-        <div className="flex items-center justify-between pt-3 mb-2">
-          <span className="text-sm font-semibold text-gray-700">본문 캡션</span>
-          <button
-            onClick={handleCopyCaption}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-white border border-gray-200 text-gray-600 hover:border-violet-300 hover:text-violet-600 active:scale-95 transition-all shadow-sm"
-          >
-            {copiedCaption ? '✅ 복사됨!' : '📋 복사'}
-          </button>
-        </div>
-        <p className="text-sm text-gray-600 whitespace-pre-wrap break-words leading-relaxed bg-gray-50 rounded-xl p-3">
+        <p className="mt-3.5 text-sm leading-[1.8] whitespace-pre-wrap break-words text-[var(--soft)]">
           {post.caption}
         </p>
-        <p className="text-xs text-gray-400 text-right mt-1 tabular-nums">{post.caption.length}자</p>
+        <p className="np-label mt-1.5 text-right">{post.caption.length}자</p>
       </div>
-    </div>
+    </article>
   );
 }
