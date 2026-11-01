@@ -122,16 +122,28 @@ function drawBody(
   ctx: CanvasRenderingContext2D,
   raw: string,
   topY: number,
-  size: number,
+  baseSize: number,
   color: string,
 ): number {
   const lines = raw.replace(/\\n/g, '\n').split('\n').filter((l) => l.trim());
+  // 헤드라인과 같은 방식으로, 긴 줄이면 그만큼 줄인다
+  const runs = lines.map((l) => [{ text: l, emphasis: false }]);
+  const size = baseSize * fitScale(runs, (S * TEXT_UNITS) / baseSize);
   const lh = size * 1.42;
   lines.forEach((line, i) => {
     const chars = [...line].map((ch) => ({ ch, size, color }));
     drawChars(ctx, chars, line, 'soft', S / 2, topY + lh * (i + 0.76), CANVAS_BODY);
   });
   return lines.length * lh;
+}
+
+/** drawBody 와 같은 높이를 미리 잰다 */
+function bodyHeight(raw: string, baseSize: number): number {
+  const lines = raw.replace(/\\n/g, '\n').split('\n').filter((l) => l.trim());
+  if (!lines.length) return 0;
+  const runs = lines.map((l) => [{ text: l, emphasis: false }]);
+  const size = baseSize * fitScale(runs, (S * TEXT_UNITS) / baseSize);
+  return lines.length * size * 1.42;
 }
 
 /* ─── Canvas: 손그림 장식 ─── */
@@ -293,27 +305,48 @@ function drawStat(ctx: CanvasRenderingContext2D, slide: InstagramSlide) {
   }
 }
 
+const OUTRO_BODY = 46;
+const OUTRO_CTA = 44;
+const OUTRO_HANDLE = 38;
+
 function drawOutro(ctx: CanvasRenderingContext2D, slide: InstagramSlide) {
   const HL = HEAD_SIZE.outro;
-  const hlH = headlineHeight(slide.headline, HL);
-  const bodyLines = (slide.body || '').replace(/\\n/g, '\n').split('\n').filter((l) => l.trim()).length;
-  const bodyH = bodyLines ? 54 + bodyLines * 66 : 0;
 
-  let y = Math.max(170, (S - (hlH + bodyH)) / 2);
+  // 헤드라인 / 설명 / 밑줄 친 안내 / 별 / 주소 — 다섯 단을 먼저 재고 가운데 맞춘다
+  const hlH = headlineHeight(slide.headline, HL);
+  const bodyH = slide.body ? 50 + bodyHeight(slide.body, OUTRO_BODY) : 0;
+  const ctaH = slide.cta ? 44 + bodyHeight(slide.cta, OUTRO_CTA) : 0;
+  const starH = 96;
+  const handleH = slide.handle ? 22 + bodyHeight(slide.handle, OUTRO_HANDLE) : 0;
+
+  let y = Math.max(110, (S - (hlH + bodyH + ctaH + starH + handleH)) / 2);
   y += drawHeadline(ctx, slide.headline, y, HL);
 
   if (slide.body) {
-    y += 54;
-    const BODY = 46;
-    const h = drawBody(ctx, slide.body, y, BODY, INK_SOFT);
-    // 밑줄 폭은 가장 긴 줄에 맞춘다. 고정값을 쓰면 짧은 문구에선 튀어나온다
-    ctx.font = `${BODY}px "${CANVAS_BODY}"`;
-    const widest = Math.max(
-      ...slide.body.replace(/\\n/g, '\n').split('\n').map((l) => ctx.measureText(l.trim()).width),
-    );
-    drawSwoosh(ctx, S / 2, y + h + 34, Math.min(widest + 34, S - 180));
+    y += 50;
+    y += drawBody(ctx, slide.body, y, OUTRO_BODY, INK_SOFT);
   }
-  drawStar(ctx, S / 2, S - 110, 34);
+
+  if (slide.cta) {
+    y += 44;
+    const h = drawBody(ctx, slide.cta, y, OUTRO_CTA, INK);
+    // 밑줄 폭은 가장 긴 줄에 맞춘다. 고정값이면 짧은 문구에서 튀어나온다
+    ctx.font = `${OUTRO_CTA}px "${CANVAS_BODY}"`;
+    const widest = Math.max(
+      ...slide.cta.replace(/\\n/g, '\n').split('\n').map((l) => ctx.measureText(l.trim()).width),
+    );
+    drawSwoosh(ctx, S / 2, y + h + 26, Math.min(widest + 30, S - 150));
+    y += h;
+  }
+
+  y += 60;
+  drawStar(ctx, S / 2, y + 30, 32);
+  y += starH;
+
+  if (slide.handle) {
+    y += 22;
+    drawBody(ctx, slide.handle, y, OUTRO_HANDLE, INK_FAINT);
+  }
 }
 
 /* ─── Canvas 조립 ─── */
@@ -413,8 +446,11 @@ function HeadlinePreview({ raw, basePx }: { raw: string; basePx: number }) {
   );
 }
 
-function BodyPreview({ raw, size, color }: { raw: string; size: string; color: string }) {
+function BodyPreview({ raw, basePx, color }: { raw: string; basePx: number; color: string }) {
   const lines = raw.replace(/\\n/g, '\n').split('\n').filter((l) => l.trim());
+  const runs = lines.map((l) => [{ text: l, emphasis: false }]);
+  const scaled = basePx * fitScale(runs, (S * TEXT_UNITS) / basePx);
+  const size = `${pxToCqw(scaled).toFixed(2)}cqw`;
   return (
     <div style={{ fontFamily: `"${CANVAS_BODY}", sans-serif`, fontSize: size, lineHeight: 1.42, color }}>
       {lines.map((line, i) => (
@@ -435,7 +471,7 @@ const Slash = ({ flip }: { flip?: boolean }) => (
 );
 
 const Star = () => (
-  <svg width="4.6cqw" height="4.6cqw" viewBox="0 0 22 22">
+  <svg width="6.2cqw" height="6.2cqw" viewBox="0 0 22 22">
     <path d="M11 2 L13.6 8.4 L20.4 8.8 L15.2 13.2 L17 19.8 L11 16 L5 19.8 L6.8 13.2 L1.6 8.8 L8.4 8.4 Z"
       fill="none" stroke={ACCENT} strokeWidth="2" strokeLinejoin="round" />
   </svg>
@@ -487,12 +523,12 @@ function SlidePreview({ slide, index, total }: { slide: InstagramSlide; index: n
         </div>
         {slide.headline && (
           <div style={{ marginTop: '4.6cqw' }}>
-            <BodyPreview raw={stripEmphasis(slide.headline)} size="4.6cqw" color={INK_SOFT} />
+            <BodyPreview raw={stripEmphasis(slide.headline)} basePx={50} color={INK_SOFT} />
           </div>
         )}
         {slide.source && (
           <div style={{ marginTop: '2.4cqw' }}>
-            <BodyPreview raw={slide.source} size="3.4cqw" color={INK_FAINT} />
+            <BodyPreview raw={slide.source} basePx={37} color={INK_FAINT} />
           </div>
         )}
       </CardFrame>
@@ -515,7 +551,7 @@ function SlidePreview({ slide, index, total }: { slide: InstagramSlide; index: n
         <HeadlinePreview raw={slide.headline} basePx={HEAD_SIZE.cover} />
         {slide.body && (
           <div style={{ marginTop: '4.3cqw' }}>
-            <BodyPreview raw={slide.body} size="4.5cqw" color={INK_SOFT} />
+            <BodyPreview raw={slide.body} basePx={48} color={INK_SOFT} />
           </div>
         )}
         <div style={{ position: 'absolute', bottom: '6cqw', left: 0, right: 0, display: 'flex', justifyContent: 'center' }}>
@@ -530,17 +566,27 @@ function SlidePreview({ slide, index, total }: { slide: InstagramSlide; index: n
       <CardFrame index={index} total={total}>
         <HeadlinePreview raw={slide.headline} basePx={HEAD_SIZE.outro} />
         {slide.body && (
-          <div style={{ marginTop: '5cqw', position: 'relative', display: 'inline-block' }}>
-            <BodyPreview raw={slide.body} size="4.5cqw" color={INK_SOFT} />
-            <svg width="100%" height="1.4cqw" viewBox="0 0 150 10" preserveAspectRatio="none"
-              style={{ position: 'absolute', left: 0, bottom: '-2.2cqw' }}>
+          <div style={{ marginTop: '4.6cqw' }}>
+            <BodyPreview raw={slide.body} basePx={OUTRO_BODY} color={INK_SOFT} />
+          </div>
+        )}
+        {slide.cta && (
+          <div style={{ marginTop: '4.1cqw', position: 'relative', display: 'inline-block' }}>
+            <BodyPreview raw={slide.cta} basePx={OUTRO_CTA} color={INK} />
+            <svg width="100%" height="1.3cqw" viewBox="0 0 150 10" preserveAspectRatio="none"
+              style={{ position: 'absolute', left: 0, bottom: '-2.4cqw' }}>
               <path d="M3 6 C40 1, 110 1, 147 5" fill="none" stroke={ACCENT} strokeWidth="4" strokeLinecap="round" />
             </svg>
           </div>
         )}
-        <div style={{ position: 'absolute', bottom: '6cqw', left: 0, right: 0, display: 'flex', justifyContent: 'center' }}>
+        <div style={{ marginTop: '6.4cqw', display: 'flex', justifyContent: 'center' }}>
           <Star />
         </div>
+        {slide.handle && (
+          <div style={{ marginTop: '2cqw' }}>
+            <BodyPreview raw={slide.handle} basePx={OUTRO_HANDLE} color={INK_FAINT} />
+          </div>
+        )}
       </CardFrame>
     );
   }
@@ -551,7 +597,7 @@ function SlidePreview({ slide, index, total }: { slide: InstagramSlide; index: n
       <HeadlinePreview raw={slide.headline} basePx={HEAD_SIZE.content} />
       {slide.body && (
         <div style={{ marginTop: '4.6cqw' }}>
-          <BodyPreview raw={slide.body} size="4.3cqw" color={INK_SOFT} />
+          <BodyPreview raw={slide.body} basePx={46} color={INK_SOFT} />
         </div>
       )}
     </CardFrame>
@@ -568,8 +614,10 @@ export function InstagramCard({ post }: { post: InstagramPost }) {
   const outroSlide: InstagramSlide = {
     slide_number: post.slides.length + 1,
     layout: 'outro',
-    headline: '매주 수요일 저녁,\n*메이커스노트*',
-    body: '뉴스레터에서 새로운 이야기를 보냅니다',
+    headline: '매주 수요일 저녁,\n*메이커스 노트*',
+    body: '뉴스레터를 통해\n매주 새로운 소식을 받아보세요',
+    cta: "프로필 링크 또는 '메이커스노트'를 검색",
+    handle: 'maily.so/makersnote',
     background_color: PAPER,
     accent_color: ACCENT,
   };

@@ -80,6 +80,11 @@ export interface InstagramSlide {
   stat_unit?: string;
   stat_badge?: string;
   source?: string;
+  // outro
+  /** 밑줄이 그어지는 안내 문구 */
+  cta?: string;
+  /** 카드 맨 아래 주소·핸들 */
+  handle?: string;
 }
 
 export interface InstagramPost {
