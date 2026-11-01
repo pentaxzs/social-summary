@@ -164,7 +164,7 @@ export default function Home() {
         imageSource, slide.headline, slide.keyword,
         unsplashKey || undefined,
         effectiveOpenaiKey || undefined,
-        slide.image_url || undefined,
+        instagramPhotoPost.slides.map((x) => x.image_url).filter(Boolean),
       );
       if (result.url) {
         handleSlideImageChange(slideIndex, result.url);
