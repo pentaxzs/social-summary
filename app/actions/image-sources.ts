@@ -351,7 +351,8 @@ export async function regenerateSlideImage(
 
     // 이미 다른 장에 붙은 사진은 모두 제외한다. 직전 사진만 빼면
     // 두 장 사이를 오가게 된다
-    const used = new Set(usedImageUrls?.filter(Boolean) ?? []);
+    // data URI 는 Unsplash 결과와 겹칠 수 없으니 걸러낼 것도 없다
+    const used = new Set(usedImageUrls?.filter((u) => u?.startsWith('http')) ?? []);
     console.log(`[Unsplash 재검색] "${query}", 제외 ${used.size}장`);
     const url = await searchUnsplash(query, unsplashKey, used);
     return url

@@ -217,7 +217,12 @@ export default function Home() {
         imageSource, slide.headline, slide.keyword,
         unsplashKey || undefined,
         effectiveOpenaiKey || undefined,
-        instagramPhotoPost.slides.map((x) => x.image_url).filter(Boolean),
+        // Unsplash 중복만 걸러내면 되므로 http 주소만 보낸다.
+        // AI 생성·직접 올린 사진은 data URI 라 그대로 실어 보내면
+        // 서버 액션 본문 1MB 제한에 걸려 요청 자체가 죽는다
+        instagramPhotoPost.slides
+          .map((x) => x.image_url)
+          .filter((u) => u.startsWith('http')),
       );
       if (result.url) {
         handleSlideImageChange(slideIndex, result.url);
