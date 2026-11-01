@@ -6,6 +6,7 @@ import { waitForPhotoFonts } from '@/lib/fonts';
 import { CARD_ACCENTS, DEFAULT_ACCENT, readStoredAccent, storeAccent } from '@/lib/card-theme';
 import { useHydrated } from '@/lib/use-hydrated';
 import { stripEmphasis } from '@/lib/handwriting';
+import { optimiseUploadedImage } from '@/lib/image-upload';
 import {
   S, PAPER, PROFILE, recapItems, photoHeightFor,
   drawPhotoTop, drawPageBadge, drawPhotoText, drawFollowSlide,
@@ -122,11 +123,13 @@ function PhotoSlidePreview({
 /* ─── 본체 ─── */
 
 export function InstagramPhotoCard({
-  post, onRegenerateImage, isRegenerating, imageError,
+  post, onImageChange, onRegenerateImage, isRegenerating, imageError,
 }: InstagramPhotoCardProps) {
   const [current, setCurrent] = useState(0);
   const [copiedCaption, setCopiedCaption] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const hydrated = useHydrated();
   const stored = useMemo(() => (hydrated ? readStoredAccent() : DEFAULT_ACCENT), [hydrated]);
@@ -172,6 +175,24 @@ export function InstagramPhotoCard({
         await new Promise((r) => setTimeout(r, 350));
       }
     } finally { setSaving(false); }
+  }
+
+  /** 사진첩에서 고른 이미지를 이 장에 붙인다. 크기는 알아서 맞춘다 */
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    // 같은 파일을 다시 골라도 onChange 가 오도록 비워둔다
+    e.target.value = '';
+    if (!file) return;
+
+    setUploadError(null);
+    setUploading(true);
+    try {
+      onImageChange(current, await optimiseUploadedImage(file));
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : '이미지를 올리지 못했습니다');
+    } finally {
+      setUploading(false);
+    }
   }
 
   async function handleCopyCaption() {
@@ -227,17 +248,23 @@ export function InstagramPhotoCard({
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3">
             <span className="np-label">사진 교체</span>
             <button type="button" onClick={() => onRegenerateImage(current, 'unsplash')}
-              disabled={isRegenerating} className={act}>Unsplash</button>
+              disabled={isRegenerating || uploading} className={act}>Unsplash</button>
             <button type="button" onClick={() => onRegenerateImage(current, 'gpt')}
-              disabled={isRegenerating} className={act}>AI 생성</button>
+              disabled={isRegenerating || uploading} className={act}>AI 생성</button>
+            <label className={`${act} cursor-pointer`}>
+              {uploading ? '올리는 중…' : '직접 올리기'}
+              <input type="file" accept="image/*" className="sr-only"
+                disabled={isRegenerating || uploading} onChange={handleUpload} />
+            </label>
             {isRegenerating && <span className="text-[11px] text-[var(--soft)]">가져오는 중…</span>}
-            {!slide?.image_url && !isRegenerating && (
+            {!slide?.image_url && !isRegenerating && !uploading && (
               <span className="text-[11px] text-[var(--soft)]">
-                사진 없음 — Unsplash 키를 넣으면 자동으로 붙습니다
+                사진 없음 — 직접 올리거나 Unsplash 키를 넣으면 붙습니다
               </span>
             )}
           </div>
         )}
+        {uploadError && <p className="mt-2 text-xs text-[#8a2a12] break-words">⚠ {uploadError}</p>}
         {imageError && <p className="mt-2 text-xs text-[#8a2a12] break-words">⚠ {imageError}</p>}
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3.5 pt-2.5 border-t border-[var(--hair)]">
