@@ -19,6 +19,7 @@ import {
   RegenerateMode,
   ALL_PLATFORMS,
   PLATFORM_META,
+  PROVIDERS,
 } from '@/lib/types';
 
 const LS_PROVIDER = 'ss_provider';
@@ -43,6 +44,42 @@ function FailedCard({ platform }: { platform: Platform }) {
       <p className="pl-3.5 border-l-[3px] text-[15px] text-[var(--soft)]" style={{ borderColor: meta.color }}>
         이 플랫폼은 만들지 못했습니다. 다시 생성해보세요.
       </p>
+    </div>
+  );
+}
+
+/** 보조 키 입력. 저장 여부가 보이지 않아 넣었는지 아닌지 알 수 없던 문제를 막는다 */
+function KeyField({
+  label, value, onChange, hint,
+}: { label: string; value: string; onChange: (v: string) => void; hint: string }) {
+  const [show, setShow] = useState(false);
+  const saved = value.length > 0;
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-1.5">
+        <span
+          className="w-1.5 h-1.5 rounded-full shrink-0"
+          style={{ background: saved ? '#2d6a44' : '#a8541c' }}
+        />
+        <span className="np-label np-label-latin">{label}</span>
+        <span className="text-[11px] text-[var(--soft)] normal-case tracking-normal">
+          {saved ? '저장됨' : '비어 있음'}
+        </span>
+        {saved && (
+          <button type="button" onClick={() => setShow((v) => !v)}
+            className="ml-auto text-[11px] underline underline-offset-2 text-[var(--soft)]">
+            {show ? '가리기' : '보기'}
+          </button>
+        )}
+      </div>
+      <input
+        type={show ? 'text' : 'password'}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={label}
+        className="w-full border border-[var(--hair)] px-3 py-2 text-base bg-[var(--paper)] placeholder:text-[var(--faint)] focus:outline-none focus:border-[var(--ink)]"
+      />
+      <p className="mt-1 text-[11px] text-[var(--soft)]">{hint}</p>
     </div>
   );
 }
@@ -377,25 +414,29 @@ export default function Home() {
 
         {/* Instagram w/photo 추가 키 */}
         {selectedPlatforms.has('instagramPhoto') && (
-          <div className="mt-4 p-4 border border-dashed border-[var(--hair)] space-y-2.5 bg-[var(--card)]">
+          <div className="mt-4 p-4 border border-dashed border-[var(--hair)] space-y-3 bg-[var(--card)]">
             <p className="np-label">사진 카드 추가 설정</p>
-            <input
-              type="password"
+
+            <KeyField
+              label="Unsplash Access Key"
               value={unsplashKey}
-              onChange={(e) => handleUnsplashKeyChange(e.target.value)}
-              placeholder="Unsplash Access Key"
-              className="w-full border border-[var(--hair)] px-3 py-2 text-base bg-[var(--paper)] placeholder:text-[var(--faint)] focus:outline-none focus:border-[var(--ink)]"
+              onChange={handleUnsplashKeyChange}
+              hint="사진을 검색해 옵니다. 없으면 사진 없이 만들어집니다"
             />
+
             {provider !== 'openai' && (
-              <input
-                type="password"
+              <KeyField
+                label="OpenAI API Key"
                 value={openaiImageKey}
-                onChange={(e) => handleOpenaiImageKeyChange(e.target.value)}
-                placeholder="OpenAI API Key (이미지 생성용)"
-                className="w-full border border-[var(--hair)] px-3 py-2 text-base bg-[var(--paper)] placeholder:text-[var(--faint)] focus:outline-none focus:border-[var(--ink)]"
+                onChange={handleOpenaiImageKeyChange}
+                hint={`AI 이미지 생성과 영문 검색어에 씁니다. ${PROVIDERS[provider].label} 키로는 이미지를 만들 수 없습니다`}
               />
             )}
-            <p className="text-[11px] text-[var(--soft)]">한번 입력하면 자동 저장됩니다</p>
+            {provider === 'openai' && (
+              <p className="text-[11px] text-[var(--soft)]">
+                이미지에는 위에 넣은 OpenAI 키를 함께 씁니다
+              </p>
+            )}
           </div>
         )}
 
