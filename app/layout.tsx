@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { IBM_Plex_Sans } from 'next/font/google';
-import { euljiro, hanna } from '@/lib/fonts';
+import { euljiro, hanna, pretendardBold, pretendardMedium } from '@/lib/fonts';
 import './globals.css';
 
 const ibmPlex = IBM_Plex_Sans({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-sans' });
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ko">
-      <body className={`${ibmPlex.variable} ${euljiro.variable} ${hanna.variable} font-[family-name:var(--font-sans)] min-h-screen bg-[var(--paper)]`}>{children}</body>
+      <body className={`${ibmPlex.variable} ${euljiro.variable} ${hanna.variable} ${pretendardBold.variable} ${pretendardMedium.variable} font-[family-name:var(--font-sans)] min-h-screen bg-[var(--paper)]`}>{children}</body>
     </html>
   );
 }

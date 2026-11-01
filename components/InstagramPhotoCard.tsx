@@ -1,33 +1,17 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { InstagramPhotoPost, InstagramPhotoSlide, InstagramSlide } from '@/lib/types';
-import { CANVAS_BODY, waitForCardFonts } from '@/lib/fonts';
+import { InstagramPhotoPost, InstagramPhotoSlide } from '@/lib/types';
+import { waitForPhotoFonts, PHOTO_HEAD_FONT, PHOTO_BODY_FONT } from '@/lib/fonts';
 import { CARD_ACCENTS, DEFAULT_ACCENT, readStoredAccent, storeAccent } from '@/lib/card-theme';
 import { useHydrated } from '@/lib/use-hydrated';
 import { stripEmphasis } from '@/lib/handwriting';
 import {
-  PAPER, INK, INK_SOFT, INK_FAINT, S,
-  drawHeadline, headlineHeight, drawBody, bodyHeight,
-  drawChars, drawSlashes, drawSwoosh, drawInstaMark, drawPill, drawStat,
-} from '@/lib/card-canvas';
-import { HeadlinePreview, BodyPreview, Pill, Slash, InstaMark, CardFrame } from '@/components/CardParts';
-
-/**
- * 사진 카드.
- *
- * 사진을 카드 전체에 깔고 글자를 얹으면 사진이 밝거나 복잡할 때 바로 못 읽는다.
- * 그래서 위 60% 는 종이(텍스트), 아래 40% 는 사진으로 나눈다. 글자가 사진 위에
- * 올라가지 않으므로 스크림이 필요 없고, 일반 카드와 같은 타이포를 그대로 쓴다.
- *
- * 수치·마무리 슬라이드는 사진 없이 일반 카드와 동일하게 그린다 — 수치는 숫자가
- * 주인공이라 60% 안에 다 들어가지 않고, 마무리는 안내 문구가 다섯 단이다.
- */
-const PHOTO_RATIO = 0.4;
-const TEXT_H = S * (1 - PHOTO_RATIO);
-
-/** 텍스트 영역이 좁으므로 일반 카드보다 한 단계 작게 */
-const PHOTO_HEAD = { cover: 112, content: 104 } as const;
+  S, PAD, PHOTO_H, PAPER, INK, INK_SOFT, INK_FAINT, PROFILE,
+  FOLLOW_HEAD, FOLLOW_BODY, RECAP_LABEL, HAIRLINE,
+  RECAP_ROW_MAX, RECAP_ROW_MIN, RECAP_GAP_TOP, pxToCqw, recapItems,
+  drawPhotoTop, drawPageBadge, drawPhotoText, drawFollowSlide,
+} from '@/lib/photo-canvas';
 
 interface InstagramPhotoCardProps {
   post: InstagramPhotoPost;
@@ -37,13 +21,11 @@ interface InstagramPhotoCardProps {
   imageError: string | null;
 }
 
-/* ─── Canvas ─── */
-
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    // Unsplash 는 CORS 를 허용하고 GPT 이미지는 data URI 다.
-    // 원문 기사 이미지는 쓰지 않으므로 여기서 막힐 일이 없다.
+    // Unsplash 는 CORS 를 허용하고 생성 이미지는 data URI 다.
+    // 같은 출처인 /profile.png 도 문제없다.
     img.crossOrigin = 'anonymous';
     img.onload = () => resolve(img);
     img.onerror = reject;
@@ -51,185 +33,42 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-/** 아래 40% 에 사진을 꽉 채워 넣는다 (가운데 크롭) */
-function drawPhotoBand(ctx: CanvasRenderingContext2D, img: HTMLImageElement) {
-  const bandH = S * PHOTO_RATIO;
-  const scale = Math.max(S / img.width, bandH / img.height);
-  const w = img.width * scale;
-  const h = img.height * scale;
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(0, TEXT_H, S, bandH);
-  ctx.clip();
-  ctx.drawImage(img, (S - w) / 2, TEXT_H + (bandH - h) / 2, w, h);
-  ctx.restore();
-}
-
-/** 사진이 없을 때 자리를 메우는 색 띠 */
-function drawPhotoFallback(ctx: CanvasRenderingContext2D, accent: string) {
-  ctx.save();
-  ctx.fillStyle = accent;
-  ctx.globalAlpha = 0.12;
-  ctx.fillRect(0, TEXT_H, S, S * PHOTO_RATIO);
-  ctx.restore();
-}
-
-function drawSplitCover(ctx: CanvasRenderingContext2D, slide: InstagramSlide, accent: string) {
-  const HL = PHOTO_HEAD.cover;
-  const eyebrowH = slide.label ? 54 + 40 : 0;
-  const hlH = headlineHeight(slide.headline, HL);
-  const bodyH = slide.body ? 42 + bodyHeight(slide.body, 46) : 0;
-
-  let y = Math.max(72, (TEXT_H - (eyebrowH + hlH + bodyH)) / 2);
-
-  if (slide.label) {
-    ctx.font = `54px "${CANVAS_BODY}"`;
-    const w = ctx.measureText(slide.label).width;
-    drawChars(ctx, [...slide.label].map((ch) => ({ ch, size: 54, color: INK_SOFT })),
-      slide.label, 'soft', S / 2, y + 44, CANVAS_BODY);
-    drawSlashes(ctx, S / 2 - w / 2 - 88, y + 26, 1, accent);
-    drawSlashes(ctx, S / 2 + w / 2 + 88, y + 26, -1, accent);
-    y += eyebrowH;
-  }
-
-  y += drawHeadline(ctx, slide.headline, y, HL, accent);
-  if (slide.body) {
-    y += 42;
-    drawBody(ctx, slide.body, y, 46, INK_SOFT);
+async function tryLoad(src: string): Promise<HTMLImageElement | null> {
+  if (!src) return null;
+  try {
+    return await loadImage(src);
+  } catch {
+    return null; // 못 받아도 카드는 나온다
   }
 }
 
-function drawSplitContent(ctx: CanvasRenderingContext2D, slide: InstagramSlide, accent: string) {
-  const HL = PHOTO_HEAD.content;
-  const kwH = slide.keyword ? 82 + 36 : 0;
-  const hlH = headlineHeight(slide.headline, HL);
-  const bodyH = slide.body ? 44 + bodyHeight(slide.body, 44) : 0;
-
-  let y = Math.max(72, (TEXT_H - (kwH + hlH + bodyH)) / 2);
-
-  if (slide.keyword) {
-    drawPill(ctx, slide.keyword, S / 2, y, accent);
-    y += kwH;
-  }
-  y += drawHeadline(ctx, slide.headline, y, HL, accent);
-  if (slide.body) {
-    y += 44;
-    drawBody(ctx, slide.body, y, 44, INK_SOFT);
-  }
-}
-
-const NEXT_LABEL = 'NEXT STORY';
-const NEXT_CTA = '다음 편도 궁금하시다면\n팔로우해주세요';
-const NEXT_BODY = 'AI시대 유용한\n기획/디자인 팁들을 전달해드릴게요';
-const NEXT_HANDLE = '@mongle_ux';
-
-/**
- * 사진 카드의 마무리 — 다음 편 예고.
- *
- * 강약: 예고 요약이 가장 크다. 독자가 팔로우할 이유가 거기서 나오기 때문이다.
- * 팔로우 요청은 밑줄로 묶어 행동을 분리하고, 무엇을 받는지는 그 아래 보조로 둔다.
- * 예고가 없는 글이면 요약 줄을 빼고 팔로우 요청이 헤드라인 자리를 차지한다.
- */
-function drawNextStoryOutro(ctx: CanvasRenderingContext2D, nextStory: string, accent: string) {
-  const hasStory = nextStory.trim().length > 0;
-  const HL = hasStory ? 104 : 92;
-  const headline = hasStory ? nextStory : NEXT_CTA;
-
-  const labelH = 54 + 40;
-  const hlH = headlineHeight(headline, HL);
-  const ctaH = hasStory ? 46 + bodyHeight(NEXT_CTA, 48) : 0;
-  const bodyH = 40 + bodyHeight(NEXT_BODY, 42);
-  const markH = 104;
-  const handleH = 20 + bodyHeight(NEXT_HANDLE, 38);
-
-  let y = Math.max(96, (S - (labelH + hlH + ctaH + bodyH + markH + handleH)) / 2);
-
-  // 머리말
-  ctx.font = `54px "${CANVAS_BODY}"`;
-  const lw = ctx.measureText(NEXT_LABEL).width;
-  drawChars(ctx, [...NEXT_LABEL].map((ch) => ({ ch, size: 54, color: accent })),
-    NEXT_LABEL, 'soft', S / 2, y + 44, CANVAS_BODY);
-  drawSlashes(ctx, S / 2 - lw / 2 - 88, y + 26, 1, accent);
-  drawSlashes(ctx, S / 2 + lw / 2 + 88, y + 26, -1, accent);
-  y += labelH;
-
-  y += drawHeadline(ctx, headline, y, HL, accent);
-
-  if (hasStory) {
-    y += 46;
-    const h = drawBody(ctx, NEXT_CTA, y, 48, INK);
-    ctx.font = `48px "${CANVAS_BODY}"`;
-    const widest = Math.max(...NEXT_CTA.split('\n').map((l) => ctx.measureText(l).width));
-    drawSwoosh(ctx, S / 2, y + h + 26, Math.min(widest + 30, S - 150), accent);
-    y += h;
-  }
-
-  y += 40;
-  y += drawBody(ctx, NEXT_BODY, y, 42, INK_SOFT);
-
-  y += 52;
-  drawInstaMark(ctx, S / 2, y + 30, 30, accent);
-  y += markH;
-
-  y += 20;
-  drawBody(ctx, NEXT_HANDLE, y, 38, INK_FAINT);
-}
-
+/** null 슬라이드가 마지막 팔로우 장이다 */
 async function buildPhotoCanvas(
-  slide: InstagramPhotoSlide,
+  slide: InstagramPhotoSlide | null,
   index: number,
   total: number,
   accent: string,
   nextStory: string,
+  recap: string[],
 ): Promise<HTMLCanvasElement> {
   const canvas = document.createElement('canvas');
   canvas.width = S;
   canvas.height = S;
   const ctx = canvas.getContext('2d')!;
-
   ctx.fillStyle = PAPER;
   ctx.fillRect(0, 0, S, S);
 
-  const layout = slide.layout ?? (index === 0 ? 'cover' : 'content');
-  const withPhoto = layout === 'cover' || layout === 'content';
-
-  if (withPhoto) {
-    if (slide.image_url) {
-      try {
-        drawPhotoBand(ctx, await loadImage(slide.image_url));
-      } catch {
-        drawPhotoFallback(ctx, accent); // 사진을 못 받아도 카드는 나온다
-      }
-    } else {
-      drawPhotoFallback(ctx, accent);
-    }
-    if (layout === 'cover') drawSplitCover(ctx, slide, accent);
-    else drawSplitContent(ctx, slide, accent);
-  } else if (layout === 'stat') {
-    drawStat(ctx, slide, accent);
-  } else {
-    drawNextStoryOutro(ctx, nextStory, accent);
+  if (!slide) {
+    const avatar = await tryLoad(PROFILE.avatar);
+    drawFollowSlide(ctx, { recap, nextStory, avatar, accent });
+    drawPageBadge(ctx, index, total, false);
+    return canvas;
   }
 
-  // 분할 카드는 텍스트 영역이 좁아 머리말과 번호가 같은 높이에서 부딪힌다.
-  // 사진 위 우하단으로 내리고, 사진이 밝아도 읽히도록 그림자를 깐다.
-  if (withPhoto) {
-    ctx.save();
-    ctx.font = `34px "${CANVAS_BODY}"`;
-    ctx.fillStyle = 'rgba(255,255,255,0.92)';
-    ctx.shadowColor = 'rgba(0,0,0,0.45)';
-    ctx.shadowBlur = 10;
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText(`${index + 1} / ${total}`, S - 54, S - 44);
-    ctx.restore();
-  } else if (layout !== 'stat') {
-    ctx.font = `34px "${CANVAS_BODY}"`;
-    ctx.fillStyle = INK_FAINT;
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'top';
-    ctx.fillText(`${index + 1} / ${total}`, S - 76, 76);
-  }
+  const img = await tryLoad(slide.image_url);
+  drawPhotoTop(ctx, img, accent);
+  drawPhotoText(ctx, slide.headline, slide.body, accent, { eyebrow: slide.keyword || slide.label });
+  drawPageBadge(ctx, index, total, !!img);
   return canvas;
 }
 
@@ -247,151 +86,197 @@ function triggerDownload(canvas: HTMLCanvasElement, filename: string) {
 
 /* ─── 미리보기 ─── */
 
-function SplitFrame({
-  slide, index, total, accent, children,
-}: {
-  slide: InstagramPhotoSlide; index: number; total: number; accent: string; children: React.ReactNode;
-}) {
+/**
+ * next/font 가 만드는 CSS 변수(--font-photo-head)는 쓰지 않는다.
+ * declarations 로 @font-face 의 이름을 PretendardBoldCanvas 로 고정해 둔 탓에
+ * 그 변수는 존재하지 않는 패밀리를 가리키고, 미리보기만 대체 폰트로 그려졌다.
+ * Canvas 와 같은 이름을 직접 쓰면 두 쪽이 어긋날 수 없다.
+ */
+const headFont = `"${PHOTO_HEAD_FONT}", -apple-system, sans-serif`;
+const bodyFont = `"${PHOTO_BODY_FONT}", -apple-system, sans-serif`;
+
+function Badge({ index, total, onPhoto }: { index: number; total: number; onPhoto: boolean }) {
   return (
-    <div
-      style={{
-        containerType: 'inline-size', width: '100%', aspectRatio: '1', background: PAPER,
-        position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column',
-      }}
-    >
+    <span style={{
+      position: 'absolute', top: '6cqw', right: '6.7cqw', zIndex: 3,
+      width: '8.5cqw', height: '8.5cqw', borderRadius: '50%',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: onPhoto ? 'rgba(20,23,26,0.55)' : 'rgba(20,23,26,0.08)',
+      color: onPhoto ? '#fff' : INK_SOFT,
+      fontFamily: headFont, fontSize: '3.1cqw',
+    }}>{index + 1}/{total}</span>
+  );
+}
+
+/** 강조 구간(*…*)만 키 컬러로 */
+function Emphasised({ raw, accent }: { raw: string; accent: string }) {
+  const parts = raw.replace(/\\n/g, '\n').split(/(\*[^*\n]+\*)/);
+  return (
+    <>
+      {parts.map((p, i) =>
+        p.startsWith('*') && p.endsWith('*') && p.length > 2
+          ? <span key={i} style={{ color: accent }}>{p.slice(1, -1)}</span>
+          : <span key={i}>{p}</span>,
+      )}
+    </>
+  );
+}
+
+function FollowCardRow() {
+  return (
+    <div style={{
+      marginTop: pxToCqw(48), display: 'flex', alignItems: 'center', gap: '3.5cqw',
+      background: '#fff', borderRadius: '2.6cqw', padding: '3.5cqw',
+      boxShadow: '0 3px 24px rgba(20,23,26,0.14)',
+    }}>
       <span style={{
-        position: 'absolute', bottom: '4.1cqw', right: '5cqw', fontSize: '3.1cqw', zIndex: 2,
-        color: 'rgba(255,255,255,0.92)', textShadow: '0 1px 6px rgba(0,0,0,0.45)',
-        fontFamily: `"${CANVAS_BODY}", sans-serif`,
-      }}>{index + 1} / {total}</span>
-
-      <div style={{
-        height: `${(1 - PHOTO_RATIO) * 100}%`, display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '0 7.5cqw',
+        width: '10.4cqw', height: '10.4cqw', borderRadius: '50%', flex: 'none',
+        background: '#f1f3f5', boxShadow: `inset 0 0 0 2px ${HAIRLINE}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontFamily: headFont, fontSize: '4.8cqw', color: INK_FAINT, overflow: 'hidden',
       }}>
-        {children}
-      </div>
-
-      <div style={{ height: `${PHOTO_RATIO * 100}%`, background: `${accent}1f`, overflow: 'hidden' }}>
-        {slide.image_url && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={slide.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-        )}
-      </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={PROFILE.avatar} alt=""
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+      </span>
+      <span style={{ minWidth: 0, flex: 1 }}>
+        <span style={{ display: 'block', fontFamily: headFont, fontSize: '3.7cqw', color: INK }}>
+          {PROFILE.handle}
+        </span>
+        <span style={{ display: 'block', fontFamily: bodyFont, fontSize: '2.8cqw', color: INK_FAINT }}>
+          {PROFILE.name}
+        </span>
+      </span>
+      <span style={{
+        background: '#0095f6', color: '#fff', borderRadius: '1.7cqw',
+        padding: '1.9cqw 4.4cqw', fontFamily: headFont, fontSize: '3.5cqw', flex: 'none',
+        position: 'relative',
+      }}>
+        팔로우
+        {/* PNG 쪽 drawCursor 와 같은 모양·같은 자리 */}
+        <svg viewBox="0 0 22 34" aria-hidden
+          style={{ position: 'absolute', left: '74.5%', top: '69.8%', width: '3.05cqw', overflow: 'visible' }}>
+          <path d="M0 0 L0 30 L7.5 23 L12.5 34 L17.5 31.5 L12.5 21 L22 20 Z"
+            fill="#15171a" stroke="#ffffff" strokeWidth="3" strokeLinejoin="round" />
+        </svg>
+      </span>
     </div>
   );
 }
 
-function NextStoryPreview({ nextStory, accent }: { nextStory: string; accent: string }) {
+/** 마지막 장 — 목차 / 다음 편 예고 / 팔로우 */
+function FollowSlidePreview({
+  recap, nextStory, accent,
+}: { recap: string[]; nextStory: string; accent: string }) {
   const hasStory = nextStory.trim().length > 0;
   return (
-    <CardFrame index={0} total={0} showNumber={false}>
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        gap: '2.8cqw', marginBottom: '3.4cqw',
-      }}>
-        <Slash accent={accent} />
-        <span style={{ fontFamily: `"${CANVAS_BODY}", sans-serif`, fontSize: '5cqw', color: accent }}>
-          {NEXT_LABEL}
-        </span>
-        <Slash flip accent={accent} />
+    <div style={{
+      flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column',
+      padding: `${pxToCqw(PAD)} 6.7cqw 6.7cqw`, overflow: 'hidden', textAlign: 'left',
+    }}>
+      <div style={{ fontFamily: bodyFont, fontSize: '2.8cqw', color: INK_FAINT, paddingTop: pxToCqw(40) }}>
+        {RECAP_LABEL}
       </div>
 
-      <HeadlinePreview raw={hasStory ? nextStory : NEXT_CTA} basePx={hasStory ? 104 : 92} accent={accent} />
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', marginTop: pxToCqw(RECAP_GAP_TOP - 20) }}>
+        {recap.map((text, i) => (
+          <div key={i} style={{
+            flex: 1, minHeight: pxToCqw(RECAP_ROW_MIN), maxHeight: pxToCqw(RECAP_ROW_MAX),
+            display: 'flex', alignItems: 'center', gap: pxToCqw(20),
+            borderBottom: i < recap.length - 1 ? `2px solid ${HAIRLINE}` : 'none',
+          }}>
+            <span style={{
+              width: pxToCqw(38), height: pxToCqw(38), borderRadius: '50%', flex: 'none',
+              background: accent, color: '#fff', fontFamily: headFont, fontSize: '2.2cqw',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>{i + 1}</span>
+            <span style={{
+              fontFamily: headFont, fontSize: '3.5cqw', color: INK, minWidth: 0,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>{text}</span>
+          </div>
+        ))}
+      </div>
 
-      {hasStory && (
-        <div style={{ marginTop: '4.3cqw', position: 'relative', display: 'inline-block' }}>
-          <BodyPreview raw={NEXT_CTA} basePx={48} color={INK} />
-          <svg width="100%" height="1.3cqw" viewBox="0 0 150 10" preserveAspectRatio="none"
-            style={{ position: 'absolute', left: 0, bottom: '-2.4cqw' }}>
-            <path d="M3 6 C40 1, 110 1, 147 5" fill="none" stroke={accent} strokeWidth="4" strokeLinecap="round" />
-          </svg>
+      <div style={{ marginTop: pxToCqw(24) }}>
+        {hasStory && (
+          <div style={{ fontFamily: headFont, fontSize: '3cqw', color: accent, marginBottom: pxToCqw(16) }}>
+            NEXT STORY
+          </div>
+        )}
+        <div style={{
+          fontFamily: headFont, fontSize: '5.2cqw', lineHeight: 1.32, color: INK,
+          whiteSpace: 'pre-line', wordBreak: 'keep-all',
+        }}>
+          <Emphasised raw={hasStory ? nextStory : FOLLOW_HEAD} accent={accent} />
         </div>
-      )}
-
-      <div style={{ marginTop: '3.7cqw' }}>
-        <BodyPreview raw={NEXT_BODY} basePx={42} color={INK_SOFT} />
+        <div style={{
+          fontFamily: bodyFont, fontSize: '2.8cqw', lineHeight: 1.5, color: INK_SOFT,
+          marginTop: pxToCqw(16), wordBreak: 'keep-all',
+        }}>{FOLLOW_BODY}</div>
       </div>
 
-      <div style={{ marginTop: '4.8cqw', display: 'flex', justifyContent: 'center' }}>
-        <InstaMark accent={accent} />
-      </div>
-      <div style={{ marginTop: '1.9cqw' }}>
-        <BodyPreview raw={NEXT_HANDLE} basePx={38} color={INK_FAINT} />
-      </div>
-    </CardFrame>
+      <FollowCardRow />
+    </div>
   );
 }
 
 function PhotoSlidePreview({
-  slide, index, total, accent, nextStory,
-}: { slide: InstagramPhotoSlide; index: number; total: number; accent: string; nextStory: string }) {
-  const layout = slide.layout ?? (index === 0 ? 'cover' : 'content');
-
-  if (layout === 'outro') return <NextStoryPreview nextStory={nextStory} accent={accent} />;
-
-  if (layout === 'stat') {
-    return (
-      <CardFrame index={index} total={total} showNumber={false}>
-        <Pill text={slide.stat_badge || '수치'} accent={accent} />
-        <div style={{
-          display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '2cqw',
-          fontFamily: 'var(--font-ig-head)', lineHeight: 0.9,
-        }}>
-          <span style={{ fontSize: '28cqw', color: accent, display: 'inline-block' }}>
-            {slide.stat_value || '—'}
-          </span>
-          {slide.stat_unit && <span style={{ fontSize: '12cqw' }}>{slide.stat_unit}</span>}
-        </div>
-        {slide.headline && (
-          <div style={{ marginTop: '4.6cqw' }}>
-            <BodyPreview raw={stripEmphasis(slide.headline)} basePx={50} color={INK_SOFT} />
-          </div>
-        )}
-        {slide.source && (
-          <div style={{ marginTop: '2.4cqw' }}>
-            <BodyPreview raw={slide.source} basePx={37} color={INK_FAINT} />
-          </div>
-        )}
-      </CardFrame>
-    );
-  }
-
-  if (layout === 'cover') {
-    return (
-      <SplitFrame slide={slide} index={index} total={total} accent={accent}>
-        {slide.label && (
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            gap: '2.8cqw', marginBottom: '3.4cqw',
-          }}>
-            <Slash accent={accent} />
-            <span style={{ fontFamily: `"${CANVAS_BODY}", sans-serif`, fontSize: '5cqw', color: INK_SOFT }}>
-              {slide.label}
-            </span>
-            <Slash flip accent={accent} />
-          </div>
-        )}
-        <HeadlinePreview raw={slide.headline} basePx={PHOTO_HEAD.cover} accent={accent} />
-        {slide.body && (
-          <div style={{ marginTop: '3.9cqw' }}>
-            <BodyPreview raw={slide.body} basePx={46} color={INK_SOFT} />
-          </div>
-        )}
-      </SplitFrame>
-    );
-  }
+  slide, index, total, accent, nextStory, recap,
+}: {
+  slide: InstagramPhotoSlide | null; index: number; total: number;
+  accent: string; nextStory: string; recap: string[];
+}) {
+  const isFollow = slide === null;
 
   return (
-    <SplitFrame slide={slide} index={index} total={total} accent={accent}>
-      {slide.keyword && <Pill text={slide.keyword} accent={accent} />}
-      <HeadlinePreview raw={slide.headline} basePx={PHOTO_HEAD.content} accent={accent} />
-      {slide.body && (
-        <div style={{ marginTop: '4.1cqw' }}>
-          <BodyPreview raw={slide.body} basePx={44} color={INK_SOFT} />
-        </div>
+    <div style={{
+      containerType: 'inline-size', width: '100%', aspectRatio: '1', background: PAPER,
+      position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column',
+    }}>
+      <Badge index={index} total={total} onPhoto={!isFollow && !!slide?.image_url} />
+
+      {isFollow ? (
+        <FollowSlidePreview recap={recap} nextStory={nextStory} accent={accent} />
+      ) : (
+        <>
+          <div style={{
+            height: `${(PHOTO_H / S) * 100}%`, background: `${accent}24`,
+            overflow: 'hidden', flex: 'none',
+          }}>
+            {slide.image_url && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={slide.image_url} alt=""
+                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+            )}
+          </div>
+
+          <div style={{
+            flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column',
+            padding: '5.2cqw 6.7cqw 6.7cqw', textAlign: 'left', overflow: 'hidden',
+          }}>
+            {(slide.keyword || slide.label) && (
+              <div style={{ fontFamily: headFont, fontSize: '3.2cqw', color: accent, marginBottom: '2cqw' }}>
+                {slide.keyword || slide.label}
+              </div>
+            )}
+            <div style={{
+              fontFamily: headFont, fontSize: '6.7cqw', lineHeight: 1.3, color: INK,
+              whiteSpace: 'pre-line', wordBreak: 'keep-all',
+            }}>
+              <Emphasised raw={slide.headline} accent={accent} />
+            </div>
+            {slide.body && (
+              <div style={{
+                fontFamily: bodyFont, fontSize: '3.7cqw', lineHeight: 1.58, color: INK_SOFT,
+                marginTop: '3.2cqw', whiteSpace: 'pre-line', wordBreak: 'keep-all',
+              }}>{slide.body}</div>
+            )}
+          </div>
+        </>
       )}
-    </SplitFrame>
+    </div>
   );
 }
 
@@ -409,28 +294,26 @@ export function InstagramPhotoCard({
   const [picked, setPicked] = useState<string | null>(null);
   const accent = picked ?? stored;
 
-  // 다음 편 예고는 원문 레터 말미에서 AI 가 뽑아 2줄로 줄인 것이다.
-  // 없는 글이면 빈 문자열이고, 그때는 팔로우 요청이 헤드라인 자리로 올라간다.
-  const nextStory = (post.next_story || '').trim();
+  const nextStory = stripEmphasis(post.next_story || '').trim()
+    ? (post.next_story || '').trim()
+    : '';
 
-  const outroSlide: InstagramPhotoSlide = {
-    slide_number: post.slides.length + 1,
-    layout: 'outro',
-    headline: nextStory,
-    background_color: PAPER,
-    accent_color: accent,
-    image_url: '',
-  };
+  const recap = useMemo(
+    () => recapItems(post.slides.map((s) => s.headline)),
+    [post.slides],
+  );
 
-  const slides = [...post.slides, outroSlide];
+  const slides: (InstagramPhotoSlide | null)[] = [...post.slides, null];
   const total = slides.length;
   const slide = slides[current];
-  const layout = slide.layout ?? (current === 0 ? 'cover' : 'content');
-  const canSwapPhoto = layout === 'cover' || layout === 'content';
+  const canSwapPhoto = slide !== null;
 
-  async function save(target: InstagramPhotoSlide, i: number) {
-    await waitForCardFonts();
-    triggerDownload(await buildPhotoCanvas(target, i, total, accent, nextStory), `photo-slide-${i + 1}.png`);
+  async function save(target: InstagramPhotoSlide | null, i: number) {
+    await waitForPhotoFonts();
+    triggerDownload(
+      await buildPhotoCanvas(target, i, total, accent, nextStory, recap),
+      `photo-slide-${i + 1}.png`,
+    );
   }
 
   async function handleDownloadCurrent() {
@@ -441,9 +324,12 @@ export function InstagramPhotoCard({
   async function handleDownloadAll() {
     setSaving(true);
     try {
-      await waitForCardFonts();
+      await waitForPhotoFonts();
       for (let i = 0; i < slides.length; i++) {
-        triggerDownload(await buildPhotoCanvas(slides[i], i, total, accent, nextStory), `photo-slide-${i + 1}.png`);
+        triggerDownload(
+          await buildPhotoCanvas(slides[i], i, total, accent, nextStory, recap),
+          `photo-slide-${i + 1}.png`,
+        );
         await new Promise((r) => setTimeout(r, 350));
       }
     } finally { setSaving(false); }
@@ -473,7 +359,8 @@ export function InstagramPhotoCard({
 
       <div className="pl-3.5 border-l-[3px] min-w-0" style={{ borderColor: '#6e1b33' }}>
         <div className="max-w-[420px]">
-          <PhotoSlidePreview slide={slide} index={current} total={total} accent={accent} nextStory={nextStory} />
+          <PhotoSlidePreview slide={slide} index={current} total={total}
+            accent={accent} nextStory={nextStory} recap={recap} />
         </div>
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-3 mt-3">
@@ -505,6 +392,11 @@ export function InstagramPhotoCard({
             <button type="button" onClick={() => onRegenerateImage(current, 'gpt')}
               disabled={isRegenerating} className={act}>AI 생성</button>
             {isRegenerating && <span className="text-[11px] text-[var(--soft)]">가져오는 중…</span>}
+            {!slide?.image_url && !isRegenerating && (
+              <span className="text-[11px] text-[var(--soft)]">
+                사진 없음 — Unsplash 키를 넣으면 자동으로 붙습니다
+              </span>
+            )}
           </div>
         )}
         {imageError && <p className="mt-2 text-xs text-[#8a2a12] break-words">⚠ {imageError}</p>}

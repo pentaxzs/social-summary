@@ -11,7 +11,27 @@
       "Bash(git push:*)",
       "Bash(vercel ls:*)",
       "Bash(npm uninstall:*)",
-      "Bash(vercel --prod)"
+      "Bash(vercel --prod)",
+      "mcp__ide__getDiagnostics",
+      "Skill(ship)",
+      "Bash(vercel --prod --force)",
+      "Bash(vercel deploy:*)",
+      "Skill(update-config)",
+      "Bash(git -C /Users/kenny/Documents/VisualStudio_CCode/superpower_socialsummary rev-parse --show-toplevel)",
+      "Read(//Users/kenny/Documents/VisualStudio_CCode/superpower_socialsummary/$\\(git -C /Users/kenny/Documents/VisualStudio_CCode/superpower_socialsummary rev-parse --show-toplevel\\)/.superpowers/sdd/**)",
+      "Bash(bash:*)",
+      "Bash(git:*)",
+      "Bash(npx next:*)",
+      "Bash(convert --version)",
+      "Bash(python3:*)",
+      "Bash(pip3 install:*)",
+      "Bash(/tmp/imgenv/bin/pip install:*)",
+      "Bash(sips -z 180 180 --out public/apple-touch-icon.png public/social-summary.png)",
+      "Bash(sips -z 32 32 --out app/favicon.ico public/social-summary.png)",
+      "Bash(sips -z 192 192 --out public/icon-192.png public/social-summary.png)",
+      "Bash(sips -z 512 512 --out public/icon-512.png public/social-summary.png)",
+      "Bash(sips -z 32 32 --out /Users/kenny/Documents/VisualStudio_CCode/superpower_socialsummary/app/icon.png /Users/kenny/Documents/VisualStudio_CCode/superpower_socialsummary/public/social-summary.png)",
+      "Bash(npx vercel:*)"
     ]
   }
 }

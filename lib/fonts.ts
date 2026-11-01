@@ -27,14 +27,50 @@ export const hanna = localFont({
   declarations: [{ prop: 'font-family', value: 'BMHannaProCanvas' }],
 });
 
+/**
+ * 사진 카드 전용 (Pretendard, SIL OFL).
+ * 손글씨 카드와 일부러 다른 결로 가기 위해 굵은 모던 산세리프를 쓴다.
+ */
+export const pretendardBold = localFont({
+  src: '../public/fonts/Pretendard-Bold.woff2',
+  display: 'swap',
+  preload: false,
+  variable: '--font-photo-head',
+  declarations: [{ prop: 'font-family', value: 'PretendardBoldCanvas' }],
+});
+
+export const pretendardMedium = localFont({
+  src: '../public/fonts/Pretendard-Medium.woff2',
+  display: 'swap',
+  preload: false,
+  variable: '--font-photo-body',
+  declarations: [{ prop: 'font-family', value: 'PretendardMediumCanvas' }],
+});
+
 /** Canvas 의 ctx.font 에 쓰는 이름 */
 export const CANVAS_HEAD = 'BMEuljiroCanvas';
 export const CANVAS_BODY = 'BMHannaProCanvas';
+export const PHOTO_HEAD_FONT = 'PretendardBoldCanvas';
+export const PHOTO_BODY_FONT = 'PretendardMediumCanvas';
 
 /**
  * Canvas 는 웹폰트가 준비되기 전에 그리면 시스템 폰트로 대체된다.
  * 그리기 직전에 반드시 await 해야 다운로드 PNG 가 화면과 같아진다.
  */
+/** 사진 카드용. 그리기 전에 반드시 await 한다 */
+export async function waitForPhotoFonts(): Promise<void> {
+  if (typeof document === 'undefined' || !document.fonts) return;
+  try {
+    await Promise.all([
+      document.fonts.load(`400 100px "${PHOTO_HEAD_FONT}"`),
+      document.fonts.load(`400 100px "${PHOTO_BODY_FONT}"`),
+    ]);
+    await document.fonts.ready;
+  } catch {
+    /* 못 받아도 그리기는 진행한다 */
+  }
+}
+
 export async function waitForCardFonts(): Promise<void> {
   if (typeof document === 'undefined' || !document.fonts) return;
   try {
