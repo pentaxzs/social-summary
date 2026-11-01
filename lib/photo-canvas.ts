@@ -11,10 +11,21 @@ import { PHOTO_HEAD_FONT, PHOTO_BODY_FONT } from '@/lib/fonts';
 import { parseHeadline, stripEmphasis, TextRun } from '@/lib/handwriting';
 
 export const S = 1080;
-export const PHOTO_H = Math.round(S * 0.55);
 export const PAD = 72;
-const TEXT_TOP = PHOTO_H + 56;
 const TEXT_W = S - PAD * 2;
+
+/**
+ * 사진 높이는 고정이 아니다. 글이 먼저고 사진이 남는 자리를 가진다.
+ * 55% 로 박아두니 본문이 긴 장에서는 글이 넘쳤고, 본문이 없는 장에서는
+ * 아래가 허옇게 비었다. 이제 글이 쓰는 만큼만 남기고 사진이 가져간다.
+ */
+export const PHOTO_H_MAX = Math.round(S * 0.72);
+export const PHOTO_H_MIN = Math.round(S * 0.38);
+const TEXT_GAP_TOP = 56;
+
+const HEAD = 72;
+const BODY = 40;
+const GAP = 34;
 
 export const PAPER = '#ffffff';
 export const INK = '#15171a';
@@ -131,25 +142,56 @@ export function drawPhotoTop(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement | null,
   accent: string,
+  photoH: number,
 ) {
   if (img) {
-    const scale = Math.max(S / img.width, PHOTO_H / img.height);
+    const scale = Math.max(S / img.width, photoH / img.height);
     const w = img.width * scale;
     const h = img.height * scale;
     ctx.save();
     ctx.beginPath();
-    ctx.rect(0, 0, S, PHOTO_H);
+    ctx.rect(0, 0, S, photoH);
     ctx.clip();
-    ctx.drawImage(img, (S - w) / 2, (PHOTO_H - h) / 2, w, h);
+    ctx.drawImage(img, (S - w) / 2, (photoH - h) / 2, w, h);
     ctx.restore();
   } else {
     // 사진이 없을 때. 빈 칸으로 두지 않고 키 컬러 면으로 채운다
     ctx.save();
     ctx.fillStyle = accent;
     ctx.globalAlpha = 0.14;
-    ctx.fillRect(0, 0, S, PHOTO_H);
+    ctx.fillRect(0, 0, S, photoH);
     ctx.restore();
   }
+}
+
+/** 글을 제 크기로 그렸을 때 차지하는 높이 */
+function textBlockHeight(
+  ctx: CanvasRenderingContext2D,
+  headline: string,
+  body: string | undefined,
+  hasEyebrow: boolean,
+): number {
+  ctx.font = `${HEAD}px "${PHOTO_HEAD_FONT}"`;
+  const headLines = wrapToWidth(ctx, stripEmphasis(headline), TEXT_W).length;
+  ctx.font = `${BODY}px "${PHOTO_BODY_FONT}"`;
+  const bodyLines = body ? wrapToWidth(ctx, body, TEXT_W).length : 0;
+  return (hasEyebrow ? 34 * 1.4 + 22 : 0)
+    + headLines * HEAD * 1.3
+    + (bodyLines ? GAP + bodyLines * BODY * 1.58 : 0);
+}
+
+/**
+ * 글이 제 크기로 들어갈 만큼만 사진에 자리를 준다.
+ * 글이 짧으면 사진이 커지고, 길면 사진이 양보한다.
+ */
+export function photoHeightFor(
+  ctx: CanvasRenderingContext2D,
+  headline: string,
+  body: string | undefined,
+  hasEyebrow: boolean,
+): number {
+  const need = textBlockHeight(ctx, headline, body, hasEyebrow) + TEXT_GAP_TOP + PAD;
+  return Math.max(PHOTO_H_MIN, Math.min(PHOTO_H_MAX, S - need));
 }
 
 /** 우상단 둥근 페이지 배지 */
@@ -184,12 +226,8 @@ export function drawPhotoText(
   headline: string,
   body: string | undefined,
   accent: string,
-  opts: { eyebrow?: string; topOffset?: number; reserveBottom?: number } = {},
+  opts: { eyebrow?: string; topOffset: number; reserveBottom?: number },
 ) {
-  const HEAD = 72;
-  const BODY = 40;
-  const GAP = 34;
-
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
 
@@ -208,8 +246,8 @@ export function drawPhotoText(
     blocks.push({ lines: bodyLines, size: BODY, lineHeight: BODY * 1.58, color: INK_SOFT, font: PHOTO_BODY_FONT });
   }
 
-  const top = opts.topOffset ?? TEXT_TOP;
-  const eyebrowH = opts.eyebrow ? 38 * 1.4 + 22 : 0;
+  const top = opts.topOffset;
+  const eyebrowH = opts.eyebrow ? 34 * 1.4 + 22 : 0;
   const available = S - top - PAD - eyebrowH - (opts.reserveBottom ?? 0);
   const k = fitBlocks(blocks, GAP, available);
 

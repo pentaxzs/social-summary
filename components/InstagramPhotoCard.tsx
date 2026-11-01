@@ -1,15 +1,13 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { InstagramPhotoPost, InstagramPhotoSlide } from '@/lib/types';
-import { waitForPhotoFonts, PHOTO_HEAD_FONT, PHOTO_BODY_FONT } from '@/lib/fonts';
+import { waitForPhotoFonts } from '@/lib/fonts';
 import { CARD_ACCENTS, DEFAULT_ACCENT, readStoredAccent, storeAccent } from '@/lib/card-theme';
 import { useHydrated } from '@/lib/use-hydrated';
 import { stripEmphasis } from '@/lib/handwriting';
 import {
-  S, PAD, PHOTO_H, PAPER, INK, INK_SOFT, INK_FAINT, PROFILE,
-  FOLLOW_HEAD, FOLLOW_BODY, RECAP_LABEL, HAIRLINE,
-  RECAP_ROW_MAX, RECAP_ROW_MIN, RECAP_GAP_TOP, pxToCqw, recapItems,
+  S, PAPER, PROFILE, recapItems, photoHeightFor,
   drawPhotoTop, drawPageBadge, drawPhotoText, drawFollowSlide,
 } from '@/lib/photo-canvas';
 
@@ -66,8 +64,10 @@ async function buildPhotoCanvas(
   }
 
   const img = await tryLoad(slide.image_url);
-  drawPhotoTop(ctx, img, accent);
-  drawPhotoText(ctx, slide.headline, slide.body, accent, { eyebrow: slide.keyword || slide.label });
+  const eyebrow = slide.keyword || slide.label;
+  const photoH = photoHeightFor(ctx, slide.headline, slide.body, !!eyebrow);
+  drawPhotoTop(ctx, img, accent, photoH);
+  drawPhotoText(ctx, slide.headline, slide.body, accent, { eyebrow, topOffset: photoH + 56 });
   drawPageBadge(ctx, index, total, !!img);
   return canvas;
 }
@@ -87,196 +87,35 @@ function triggerDownload(canvas: HTMLCanvasElement, filename: string) {
 /* ─── 미리보기 ─── */
 
 /**
- * next/font 가 만드는 CSS 변수(--font-photo-head)는 쓰지 않는다.
- * declarations 로 @font-face 의 이름을 PretendardBoldCanvas 로 고정해 둔 탓에
- * 그 변수는 존재하지 않는 패밀리를 가리키고, 미리보기만 대체 폰트로 그려졌다.
- * Canvas 와 같은 이름을 직접 쓰면 두 쪽이 어긋날 수 없다.
+ * 미리보기는 저장되는 PNG 를 그대로 축소해 보여준다.
+ * 같은 화면을 React 와 Canvas 로 두 번 그리던 동안 둘이 계속 어긋났다 —
+ * 글이 길면 PNG 는 줄여서 담고 미리보기는 잘라냈다. 이제 그릴 수 없다.
  */
-const headFont = `"${PHOTO_HEAD_FONT}", -apple-system, sans-serif`;
-const bodyFont = `"${PHOTO_BODY_FONT}", -apple-system, sans-serif`;
-
-function Badge({ index, total, onPhoto }: { index: number; total: number; onPhoto: boolean }) {
-  return (
-    <span style={{
-      position: 'absolute', top: '6cqw', right: '6.7cqw', zIndex: 3,
-      width: '8.5cqw', height: '8.5cqw', borderRadius: '50%',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: onPhoto ? 'rgba(20,23,26,0.55)' : 'rgba(20,23,26,0.08)',
-      color: onPhoto ? '#fff' : INK_SOFT,
-      fontFamily: headFont, fontSize: '3.1cqw',
-    }}>{index + 1}/{total}</span>
-  );
-}
-
-/** 강조 구간(*…*)만 키 컬러로 */
-function Emphasised({ raw, accent }: { raw: string; accent: string }) {
-  const parts = raw.replace(/\\n/g, '\n').split(/(\*[^*\n]+\*)/);
-  return (
-    <>
-      {parts.map((p, i) =>
-        p.startsWith('*') && p.endsWith('*') && p.length > 2
-          ? <span key={i} style={{ color: accent }}>{p.slice(1, -1)}</span>
-          : <span key={i}>{p}</span>,
-      )}
-    </>
-  );
-}
-
-function FollowCardRow() {
-  return (
-    <div style={{
-      marginTop: pxToCqw(48), display: 'flex', alignItems: 'center', gap: '3.5cqw',
-      background: '#fff', borderRadius: '2.6cqw', padding: '3.5cqw',
-      boxShadow: '0 3px 24px rgba(20,23,26,0.14)',
-    }}>
-      <span style={{
-        width: '10.4cqw', height: '10.4cqw', borderRadius: '50%', flex: 'none',
-        background: '#f1f3f5', boxShadow: `inset 0 0 0 2px ${HAIRLINE}`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontFamily: headFont, fontSize: '4.8cqw', color: INK_FAINT, overflow: 'hidden',
-      }}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={PROFILE.avatar} alt=""
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
-      </span>
-      <span style={{ minWidth: 0, flex: 1 }}>
-        <span style={{ display: 'block', fontFamily: headFont, fontSize: '3.7cqw', color: INK }}>
-          {PROFILE.handle}
-        </span>
-        <span style={{ display: 'block', fontFamily: bodyFont, fontSize: '2.8cqw', color: INK_FAINT }}>
-          {PROFILE.name}
-        </span>
-      </span>
-      <span style={{
-        background: '#0095f6', color: '#fff', borderRadius: '1.7cqw',
-        padding: '1.9cqw 4.4cqw', fontFamily: headFont, fontSize: '3.5cqw', flex: 'none',
-        position: 'relative',
-      }}>
-        팔로우
-        {/* PNG 쪽 drawCursor 와 같은 모양·같은 자리 */}
-        <svg viewBox="0 0 22 34" aria-hidden
-          style={{ position: 'absolute', left: '74.5%', top: '69.8%', width: '3.05cqw', overflow: 'visible' }}>
-          <path d="M0 0 L0 30 L7.5 23 L12.5 34 L17.5 31.5 L12.5 21 L22 20 Z"
-            fill="#15171a" stroke="#ffffff" strokeWidth="3" strokeLinejoin="round" />
-        </svg>
-      </span>
-    </div>
-  );
-}
-
-/** 마지막 장 — 목차 / 다음 편 예고 / 팔로우 */
-function FollowSlidePreview({
-  recap, nextStory, accent,
-}: { recap: string[]; nextStory: string; accent: string }) {
-  const hasStory = nextStory.trim().length > 0;
-  return (
-    <div style={{
-      flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column',
-      padding: `${pxToCqw(PAD)} 6.7cqw 6.7cqw`, overflow: 'hidden', textAlign: 'left',
-    }}>
-      <div style={{ fontFamily: bodyFont, fontSize: '2.8cqw', color: INK_FAINT, paddingTop: pxToCqw(40) }}>
-        {RECAP_LABEL}
-      </div>
-
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', marginTop: pxToCqw(RECAP_GAP_TOP - 20) }}>
-        {recap.map((text, i) => (
-          <div key={i} style={{
-            flex: 1, minHeight: pxToCqw(RECAP_ROW_MIN), maxHeight: pxToCqw(RECAP_ROW_MAX),
-            display: 'flex', alignItems: 'center', gap: pxToCqw(20),
-            borderBottom: i < recap.length - 1 ? `2px solid ${HAIRLINE}` : 'none',
-          }}>
-            <span style={{
-              width: pxToCqw(38), height: pxToCqw(38), borderRadius: '50%', flex: 'none',
-              background: accent, color: '#fff', fontFamily: headFont, fontSize: '2.2cqw',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>{i + 1}</span>
-            <span style={{
-              fontFamily: headFont, fontSize: '3.5cqw', color: INK, minWidth: 0,
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>{text}</span>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ marginTop: pxToCqw(24) }}>
-        {hasStory && (
-          <div style={{ fontFamily: headFont, fontSize: '3cqw', color: accent, marginBottom: pxToCqw(16) }}>
-            NEXT STORY
-          </div>
-        )}
-        <div style={{
-          fontFamily: headFont, fontSize: '5.2cqw', lineHeight: 1.32, color: INK,
-          whiteSpace: 'pre-line', wordBreak: 'keep-all',
-        }}>
-          <Emphasised raw={hasStory ? nextStory : FOLLOW_HEAD} accent={accent} />
-        </div>
-        <div style={{
-          fontFamily: bodyFont, fontSize: '2.8cqw', lineHeight: 1.5, color: INK_SOFT,
-          marginTop: pxToCqw(16), wordBreak: 'keep-all',
-        }}>{FOLLOW_BODY}</div>
-      </div>
-
-      <FollowCardRow />
-    </div>
-  );
-}
-
 function PhotoSlidePreview({
   slide, index, total, accent, nextStory, recap,
 }: {
   slide: InstagramPhotoSlide | null; index: number; total: number;
   accent: string; nextStory: string; recap: string[];
 }) {
-  const isFollow = slide === null;
+  const ref = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    let stale = false;
+    (async () => {
+      await waitForPhotoFonts();
+      const drawn = await buildPhotoCanvas(slide, index, total, accent, nextStory, recap);
+      if (stale || !ref.current) return;
+      const ctx = ref.current.getContext('2d');
+      if (!ctx) return;
+      ctx.clearRect(0, 0, S, S);
+      ctx.drawImage(drawn, 0, 0);
+    })();
+    return () => { stale = true; };
+  }, [slide, index, total, accent, nextStory, recap]);
 
   return (
-    <div style={{
-      containerType: 'inline-size', width: '100%', aspectRatio: '1', background: PAPER,
-      position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column',
-    }}>
-      <Badge index={index} total={total} onPhoto={!isFollow && !!slide?.image_url} />
-
-      {isFollow ? (
-        <FollowSlidePreview recap={recap} nextStory={nextStory} accent={accent} />
-      ) : (
-        <>
-          <div style={{
-            height: `${(PHOTO_H / S) * 100}%`, background: `${accent}24`,
-            overflow: 'hidden', flex: 'none',
-          }}>
-            {slide.image_url && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={slide.image_url} alt=""
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-            )}
-          </div>
-
-          <div style={{
-            flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column',
-            padding: '5.2cqw 6.7cqw 6.7cqw', textAlign: 'left', overflow: 'hidden',
-          }}>
-            {(slide.keyword || slide.label) && (
-              <div style={{ fontFamily: headFont, fontSize: '3.2cqw', color: accent, marginBottom: '2cqw' }}>
-                {slide.keyword || slide.label}
-              </div>
-            )}
-            <div style={{
-              fontFamily: headFont, fontSize: '6.7cqw', lineHeight: 1.3, color: INK,
-              whiteSpace: 'pre-line', wordBreak: 'keep-all',
-            }}>
-              <Emphasised raw={slide.headline} accent={accent} />
-            </div>
-            {slide.body && (
-              <div style={{
-                fontFamily: bodyFont, fontSize: '3.7cqw', lineHeight: 1.58, color: INK_SOFT,
-                marginTop: '3.2cqw', whiteSpace: 'pre-line', wordBreak: 'keep-all',
-              }}>{slide.body}</div>
-            )}
-          </div>
-        </>
-      )}
-    </div>
+    <canvas ref={ref} width={S} height={S}
+      style={{ width: '100%', aspectRatio: '1', display: 'block', background: PAPER }} />
   );
 }
 
