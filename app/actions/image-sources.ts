@@ -1,6 +1,6 @@
 'use server';
 
-import { generateText, generateImage } from 'ai';
+import { generateText } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 
 /** Unsplash 검색 한 쪽에 담기는 최대 개수 */
@@ -62,14 +62,20 @@ export async function searchUnsplash(
 
 /**
  * 모델을 차례로 시도한다.
- * gpt-image-1 은 OpenAI 조직 인증을 마친 계정만 쓸 수 있어서, 인증 전이면
- * 403 이 떨어진다. 그 경우 누구나 쓸 수 있는 dall-e-3 로 넘어간다.
+ * gpt-image-1 은 OpenAI 조직 인증을 마친 계정만 쓸 수 있어 인증 전이면 403 이
+ * 떨어진다. 그 경우 누구나 쓸 수 있는 dall-e-3 로 넘어간다.
+ *
+ * SDK 의 이미지 모델을 쓰지 않고 직접 부른다. SDK 는 dall-e 계열에
+ * response_format: "b64_json" 을 붙여 보내는데 지금 API 는 그 파라미터를
+ * 모른다고 거부한다 ("Unknown parameter: 'response_format'").
+ * 어차피 보낼 것이 몇 개 안 되니 우리가 쥐고 있는 편이 낫다.
+ *
+ * 사진 칸이 가로로 기니 가로 이미지를 받아야 덜 잘린다.
  */
-const IMAGE_MODELS = [
-  // 사진 칸이 가로로 기니 가로 이미지를 받아야 덜 잘린다
-  { name: 'gpt-image-1', size: '1536x1024', options: { quality: 'medium' } },
-  { name: 'dall-e-3', size: '1792x1024', options: {} },
-] as const;
+const IMAGE_MODELS: Array<{ model: string; size: string; extra?: Record<string, string> }> = [
+  { model: 'gpt-image-1', size: '1536x1024', extra: { quality: 'medium' } },
+  { model: 'dall-e-3', size: '1792x1024' },
+];
 
 function friendlyImageError(raw: string): string {
   if (/must be verified|organization must be verified/i.test(raw)) {
@@ -78,7 +84,7 @@ function friendlyImageError(raw: string): string {
   if (/billing|quota|insufficient/i.test(raw)) {
     return 'OpenAI 크레딧이 부족합니다';
   }
-  if (/invalid[_ ]api[_ ]key|incorrect api key/i.test(raw)) {
+  if (/invalid[_ ]api[_ ]key|incorrect api key|401/i.test(raw)) {
     return 'OpenAI 키가 올바르지 않습니다';
   }
   if (/abort|timed? ?out/i.test(raw)) {
@@ -90,28 +96,66 @@ function friendlyImageError(raw: string): string {
   return raw;
 }
 
+/** URL 로 돌아온 이미지를 data URI 로 바꾼다. Canvas 가 CORS 없이 읽으려면 필요하다 */
+async function toDataUri(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+    if (!res.ok) return null;
+    const type = res.headers.get('content-type') || 'image/png';
+    const buf = Buffer.from(await res.arrayBuffer());
+    return `data:${type};base64,${buf.toString('base64')}`;
+  } catch {
+    return null;
+  }
+}
+
 export async function generateImageWithGPT(
   prompt: string,
   apiKey: string,
 ): Promise<{ url: string | null; error?: string }> {
-  const openai = createOpenAI({ apiKey });
   let lastError = '이미지를 만들지 못했습니다';
 
   for (const m of IMAGE_MODELS) {
     try {
-      const { image } = await generateImage({
-        model: openai.image(m.name),
-        prompt,
-        size: m.size,
-        ...(Object.keys(m.options).length ? { providerOptions: { openai: m.options } } : {}),
-        abortSignal: AbortSignal.timeout(120_000),
+      const res = await fetch('https://api.openai.com/v1/images/generations', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: m.model,
+          prompt,
+          n: 1,
+          size: m.size,
+          ...(m.extra ?? {}),
+        }),
+        signal: AbortSignal.timeout(120_000),
       });
-      const mediaType = image.mediaType || 'image/png';
-      return { url: `data:${mediaType};base64,${image.base64}` };
+
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        const parsed = (() => { try { return JSON.parse(body); } catch { return null; } })();
+        const raw = parsed?.error?.message || `HTTP ${res.status}`;
+        console.error(`[image] ${m.model} 실패: ${raw}`);
+        lastError = `${friendlyImageError(raw)} (${m.model})`;
+        continue;
+      }
+
+      const data = await res.json();
+      const first = data.data?.[0] as { b64_json?: string; url?: string } | undefined;
+      if (first?.b64_json) return { url: `data:image/png;base64,${first.b64_json}` };
+      if (first?.url) {
+        const dataUri = await toDataUri(first.url);
+        if (dataUri) return { url: dataUri };
+        lastError = `이미지를 내려받지 못했습니다 (${m.model})`;
+        continue;
+      }
+      lastError = `응답에 이미지가 없습니다 (${m.model})`;
     } catch (err) {
       const raw = err instanceof Error ? err.message : String(err);
-      console.error(`[image] ${m.name} 실패: ${raw}`);
-      lastError = friendlyImageError(raw);
+      console.error(`[image] ${m.model} 실패: ${raw}`);
+      lastError = `${friendlyImageError(raw)} (${m.model})`;
     }
   }
   return { url: null, error: lastError };
