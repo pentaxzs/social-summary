@@ -61,25 +61,36 @@ export async function searchUnsplash(
 /* ─── AI 이미지 생성 ─── */
 
 /**
- * 모델을 차례로 시도한다.
- * gpt-image-1 은 OpenAI 조직 인증을 마친 계정만 쓸 수 있어 인증 전이면 403 이
- * 떨어진다. 그 경우 누구나 쓸 수 있는 dall-e-3 로 넘어간다.
+ * 어떤 모델을 쓸 수 있는지는 키마다 다르다.
  *
- * SDK 의 이미지 모델을 쓰지 않고 직접 부른다. SDK 는 dall-e 계열에
- * response_format: "b64_json" 을 붙여 보내는데 지금 API 는 그 파라미터를
- * 모른다고 거부한다 ("Unknown parameter: 'response_format'").
- * 어차피 보낼 것이 몇 개 안 되니 우리가 쥐고 있는 편이 낫다.
+ * 처음에는 gpt-image-1 하나에 매달렸고, 다음에는 dall-e-3 를 뒤에 붙였다.
+ * 둘 다 "모델이 없다"고 돌아오는 키가 있다 — OpenAI 프로젝트 키는 모델
+ * 권한을 따로 주게 되어 있고, 크레딧을 넣기 전에는 이미지 모델이 아예
+ * 목록에 없다. 그래서 이제 /v1/models 로 먼저 물어보고 가진 것 중 제일
+ * 나은 걸 고른다. 없는 모델을 부르고 404 를 받는 일이 없다.
  *
- * 사진 칸이 가로로 기니 가로 이미지를 받아야 덜 잘린다.
+ * 사진 칸이 가로로 기니 가로 크기를 고른다.
  */
-const IMAGE_MODELS: Array<{ model: string; size: string; extra?: Record<string, string> }> = [
+interface ImageSpec {
+  model: string;
+  size: string;
+  extra?: Record<string, string>;
+}
+
+const IMAGE_PREFERENCE: ImageSpec[] = [
+  { model: 'gpt-image-1.5', size: '1536x1024', extra: { quality: 'medium' } },
   { model: 'gpt-image-1', size: '1536x1024', extra: { quality: 'medium' } },
+  { model: 'gpt-image-1-mini', size: '1536x1024', extra: { quality: 'medium' } },
   { model: 'dall-e-3', size: '1792x1024' },
+  { model: 'dall-e-2', size: '1024x1024' },
 ];
 
 function friendlyImageError(raw: string): string {
   if (/must be verified|organization must be verified/i.test(raw)) {
-    return 'OpenAI 조직 인증이 필요한 모델입니다. platform.openai.com 에서 인증하면 더 좋은 모델을 씁니다';
+    return 'OpenAI 조직 인증이 필요합니다. platform.openai.com → Settings → Organization 에서 인증하세요';
+  }
+  if (/does not exist|do not have access/i.test(raw)) {
+    return '이 키로는 쓸 수 없는 모델입니다';
   }
   if (/billing|quota|insufficient/i.test(raw)) {
     return 'OpenAI 크레딧이 부족합니다';
@@ -91,9 +102,31 @@ function friendlyImageError(raw: string): string {
     return '이미지 생성이 너무 오래 걸려 중단했습니다. 다시 눌러보세요';
   }
   if (/safety|content[_ ]policy|moderation/i.test(raw)) {
-    return '안전 정책에 걸려 이미지를 만들지 못했습니다. 다른 카드로 시도해보세요';
+    return '안전 정책에 걸렸습니다. 다른 카드로 시도해보세요';
   }
   return raw;
+}
+
+const NO_IMAGE_MODEL =
+  '이 키로 쓸 수 있는 이미지 모델이 없습니다. platform.openai.com → Settings → '
+  + 'Billing 에 크레딧이 있는지, Project → Limits 에서 이미지 모델이 허용돼 있는지 확인하세요';
+
+/** 이 키가 실제로 쓸 수 있는 이미지 모델. 못 물어보면 null */
+async function availableImageSpecs(apiKey: string): Promise<ImageSpec[] | null> {
+  try {
+    const res = await fetch('https://api.openai.com/v1/models', {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const ids = new Set(
+      (data.data as Array<{ id?: string }> | undefined)?.map((m) => m.id).filter(Boolean) as string[],
+    );
+    return IMAGE_PREFERENCE.filter((spec) => ids.has(spec.model));
+  } catch {
+    return null;
+  }
 }
 
 /** URL 로 돌아온 이미지를 data URI 로 바꾼다. Canvas 가 CORS 없이 읽으려면 필요하다 */
@@ -109,56 +142,69 @@ async function toDataUri(url: string): Promise<string | null> {
   }
 }
 
+async function callImageApi(
+  spec: ImageSpec,
+  prompt: string,
+  apiKey: string,
+): Promise<{ url: string } | { error: string }> {
+  try {
+    const res = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: spec.model, prompt, n: 1, size: spec.size, ...(spec.extra ?? {}) }),
+      signal: AbortSignal.timeout(120_000),
+    });
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      const parsed = (() => { try { return JSON.parse(body); } catch { return null; } })();
+      return { error: parsed?.error?.message || `HTTP ${res.status}` };
+    }
+
+    const data = await res.json();
+    const first = data.data?.[0] as { b64_json?: string; url?: string } | undefined;
+    if (first?.b64_json) return { url: `data:image/png;base64,${first.b64_json}` };
+    if (first?.url) {
+      const inlined = await toDataUri(first.url);
+      return inlined ? { url: inlined } : { error: '이미지를 내려받지 못했습니다' };
+    }
+    return { error: '응답에 이미지가 없습니다' };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 export async function generateImageWithGPT(
   prompt: string,
   apiKey: string,
+  specs?: ImageSpec[],
 ): Promise<{ url: string | null; error?: string }> {
-  let lastError = '이미지를 만들지 못했습니다';
+  // 목록을 못 받아오면 예전처럼 차례로 찔러본다
+  const candidates = specs ?? (await availableImageSpecs(apiKey)) ?? IMAGE_PREFERENCE;
+  if (candidates.length === 0) return { url: null, error: NO_IMAGE_MODEL };
 
-  for (const m of IMAGE_MODELS) {
-    try {
-      const res = await fetch('https://api.openai.com/v1/images/generations', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: m.model,
-          prompt,
-          n: 1,
-          size: m.size,
-          ...(m.extra ?? {}),
-        }),
-        signal: AbortSignal.timeout(120_000),
-      });
-
-      if (!res.ok) {
-        const body = await res.text().catch(() => '');
-        const parsed = (() => { try { return JSON.parse(body); } catch { return null; } })();
-        const raw = parsed?.error?.message || `HTTP ${res.status}`;
-        console.error(`[image] ${m.model} 실패: ${raw}`);
-        lastError = `${friendlyImageError(raw)} (${m.model})`;
-        continue;
-      }
-
-      const data = await res.json();
-      const first = data.data?.[0] as { b64_json?: string; url?: string } | undefined;
-      if (first?.b64_json) return { url: `data:image/png;base64,${first.b64_json}` };
-      if (first?.url) {
-        const dataUri = await toDataUri(first.url);
-        if (dataUri) return { url: dataUri };
-        lastError = `이미지를 내려받지 못했습니다 (${m.model})`;
-        continue;
-      }
-      lastError = `응답에 이미지가 없습니다 (${m.model})`;
-    } catch (err) {
-      const raw = err instanceof Error ? err.message : String(err);
-      console.error(`[image] ${m.model} 실패: ${raw}`);
-      lastError = `${friendlyImageError(raw)} (${m.model})`;
-    }
+  // 어느 모델이 왜 막혔는지 한 번에 보여준다. 마지막 오류만 띄우면
+  // 한 번에 하나씩만 알게 되어 진단이 느리다
+  const failures: string[] = [];
+  for (const spec of candidates) {
+    const out = await callImageApi(spec, prompt, apiKey);
+    if ('url' in out) return { url: out.url };
+    console.error(`[image] ${spec.model}: ${out.error}`);
+    failures.push(`${spec.model} — ${friendlyImageError(out.error)}`);
   }
-  return { url: null, error: lastError };
+  return { url: null, error: failures.join(' / ') };
+}
+
+/** 키가 이미지 모델을 쓸 수 있는지, 어떤 걸 쓰게 되는지 알려준다 */
+export async function checkImageModels(
+  apiKey: string,
+): Promise<{ ok: boolean; message: string }> {
+  const specs = await availableImageSpecs(apiKey);
+  if (specs === null) {
+    return { ok: false, message: '모델 목록을 불러오지 못했습니다. 키를 다시 확인해주세요' };
+  }
+  if (specs.length === 0) return { ok: false, message: NO_IMAGE_MODEL };
+  return { ok: true, message: `사용 가능: ${specs.map((s) => s.model).join(', ')}` };
 }
 
 /* ─── 검색어 ─── */
@@ -248,6 +294,9 @@ export async function assignImagesToSlides(
     ? await generateSearchQueries(slides, openaiKey)
     : slides.map((s) => s.headline.replace(/\\n/g, ' '));
 
+  // 장마다 모델 목록을 다시 묻지 않는다
+  const specs = openaiKey ? (await availableImageSpecs(openaiKey)) ?? IMAGE_PREFERENCE : [];
+
   for (let i = 0; i < slides.length; i++) {
     const slide = slides[i];
 
@@ -268,7 +317,7 @@ export async function assignImagesToSlides(
     }
 
     if (openaiKey) {
-      const result = await generateImageWithGPT(photoPrompt(slide.headline), openaiKey);
+      const result = await generateImageWithGPT(photoPrompt(slide.headline), openaiKey, specs);
       if (result.url) {
         imageUrls.push(result.url);
         continue;

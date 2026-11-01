@@ -7,7 +7,7 @@ import { SummarySkeleton } from '@/components/SummarySkeleton';
 import { InstagramCard } from '@/components/InstagramCard';
 import { InstagramPhotoCard } from '@/components/InstagramPhotoCard';
 import { summarizeUrl, regenerateSummary } from '@/app/actions/summarize';
-import { regenerateSlideImage } from '@/app/actions/image-sources';
+import { regenerateSlideImage, checkImageModels } from '@/app/actions/image-sources';
 import {
   Provider,
   Platform,
@@ -95,6 +95,7 @@ export default function Home() {
   const [instagramPhotoPost, setInstagramPhotoPost] = useState<InstagramPhotoPost | null>(null);
   const [unsplashKey, setUnsplashKey] = useState('');
   const [openaiImageKey, setOpenaiImageKey] = useState('');
+  const [imageModelMsg, setImageModelMsg] = useState<string | null>(null);
   const [submittedPlatforms, setSubmittedPlatforms] = useState<Set<Platform>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<string[]>([]);
@@ -161,6 +162,21 @@ export default function Home() {
   function handleUnsplashKeyChange(key: string) {
     setUnsplashKey(key);
     localStorage.setItem(LS_UNSPLASH_KEY, key);
+  }
+
+  /** 이 키로 어떤 이미지 모델을 쓸 수 있는지 미리 알려준다 */
+  async function checkImageKey() {
+    const key = provider === 'openai' ? apiKey : openaiImageKey;
+    if (!key) {
+      setImageModelMsg('OpenAI 키를 먼저 넣어주세요');
+      return;
+    }
+    setImageModelMsg('확인 중…');
+    try {
+      setImageModelMsg((await checkImageModels(key)).message);
+    } catch {
+      setImageModelMsg('확인하지 못했습니다');
+    }
   }
 
   function handleOpenaiImageKeyChange(key: string) {
@@ -437,6 +453,21 @@ export default function Home() {
                 이미지에는 위에 넣은 OpenAI 키를 함께 씁니다
               </p>
             )}
+
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1">
+              <button
+                type="button"
+                onClick={checkImageKey}
+                className="text-[11px] font-bold uppercase tracking-[0.12em] underline underline-offset-4 hover:no-underline"
+              >
+                이미지 모델 확인
+              </button>
+              {imageModelMsg && (
+                <span className="text-[11px] text-[var(--soft)] break-words min-w-0">
+                  {imageModelMsg}
+                </span>
+              )}
+            </div>
           </div>
         )}
 
