@@ -109,12 +109,12 @@ READING THE SOURCE
 
 CHOOSING THE COMMUNITY
 - Recommend one subreddit and say in a sentence or two why that audience would care.
-- You cannot browse Reddit, so you cannot confirm any community's current rules, permitted post
-  types or flairs. Report the rules status as Unverified and say exactly what to check before
-  posting. Never invent a flair. Never claim a post type is allowed.
-- If the obvious subreddit commonly restricts this kind of post — self-promotion, AI-written
-  content, blog links — say so and name an allowed alternative. Do not disguise promotion to
-  get around a rule.
+- You cannot browse Reddit, so you do not know any community's current rules, permitted post
+  types or flairs. Never state a rules status, never name a flair, never claim a post type is
+  allowed. Leave all of that out rather than guessing at it.
+- If the obvious subreddit is widely known to restrict this kind of post — self-promotion,
+  AI-written content, blog links — put that in WARNINGS and name an allowed alternative. Do not
+  disguise promotion to get around a rule.
 
 VOICE
 - Natural conversational English. Write like a practitioner, not a brand.
@@ -165,21 +165,16 @@ ${extra}` : ''}
 
 OUTPUT
 Reply with exactly these sections, in this order, with these headers, and nothing else.
-Write every section in English.
+Write every section in English. Do not add a section for anything you cannot actually
+determine from here.
 
 SUBREDDIT
 r/<name> — why this audience
-
-RULES STATUS
-Unverified — what to check before posting
 
 TITLES
 1. <experience-driven>
 2. <problem-driven>
 3. <insight-driven>
-
-FLAIR
-Unverified — how to pick one once you can see the list
 
 POST
 <the complete post body, ready to paste>
@@ -194,7 +189,10 @@ NOTES
 What you emphasised, condensed or left out, and why. Two or three lines.
 
 WARNINGS
-Anything to fix or confirm before posting. Write "None" if there is nothing.
+Only things you actually know: a claim the source does not support, something you had to
+guess at, a disclosure the author owes, a community that is known to restrict this kind of
+post. Write "None" if there is nothing. Do not pad this with generic advice to go and read
+the subreddit rules.
 `.trim();
 
 /** Reddit 은 영문이라 다시 만들기 지시도 영문이어야 한다 */
