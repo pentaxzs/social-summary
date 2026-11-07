@@ -3,12 +3,16 @@
 import { useState } from 'react';
 import { Provider, PROVIDERS } from '@/lib/types';
 import { useHydrated } from '@/lib/use-hydrated';
+import { KeyField } from '@/components/KeyField';
 
 interface ApiKeyInputProps {
   provider: Provider;
   apiKey: string;
   onProviderChange: (provider: Provider) => void;
   onApiKeyChange: (key: string) => void;
+  /** 유튜브 주소를 읽을 때만 쓰지만, 키는 키끼리 모아 둔다 */
+  youtubeKey: string;
+  onYoutubeKeyChange: (key: string) => void;
 }
 
 /**
@@ -20,6 +24,8 @@ export function ApiKeyInput({
   apiKey,
   onProviderChange,
   onApiKeyChange,
+  youtubeKey,
+  onYoutubeKeyChange,
 }: ApiKeyInputProps) {
   const [visible, setVisible] = useState(false);
   const [open, setOpen] = useState(false);
@@ -105,6 +111,27 @@ export function ApiKeyInput({
                 {config.keyHelpLabel}
               </a>
               에서 확인할 수 있습니다. 브라우저에만 저장되고 서버에 남지 않습니다.
+            </p>
+          </div>
+
+          <div className="pt-3.5 border-t border-dashed border-[var(--hair)]">
+            <KeyField
+              label="YouTube Data API Key"
+              value={youtubeKey}
+              onChange={onYoutubeKeyChange}
+              hint="유튜브 영상을 요약할 때만 씁니다. 유튜브가 서버에서 온 요청을 막기 때문에 이 키가 있어야 영상 정보를 읽습니다"
+            />
+            <p className="mt-1.5 text-[11px] text-[var(--soft)]">
+              무료입니다. Google Cloud 콘솔에서{' '}
+              <a
+                href="https://console.cloud.google.com/apis/library/youtube.googleapis.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[var(--ink)] underline underline-offset-2 hover:no-underline font-medium"
+              >
+                YouTube Data API v3
+              </a>
+              {' '}를 켜면 발급됩니다. 자막은 받아올 수 없어 제목·채널·태그와 설명란까지만 읽습니다.
             </p>
           </div>
         </div>
