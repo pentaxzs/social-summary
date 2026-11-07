@@ -339,9 +339,10 @@ export async function summarizeUrl(
   selectedPlatforms: Platform[],
   unsplashKey?: string,
   openaiImageKey?: string,
+  youtubeKey?: string,
 ): Promise<SummarizeResponse> {
   try {
-    const { title, content } = await extractContent(url);
+    const { title, content } = await extractContent(url, youtubeKey);
     const model = createModel(provider, apiKey);
 
     const textPlatforms = selectedPlatforms.filter(

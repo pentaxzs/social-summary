@@ -8,6 +8,7 @@ import { InstagramCard } from '@/components/InstagramCard';
 import { InstagramPhotoCard } from '@/components/InstagramPhotoCard';
 import { summarizeUrl, regenerateSummary } from '@/app/actions/summarize';
 import { regenerateSlideImage, checkImageModels } from '@/app/actions/image-sources';
+import { youtubeVideoId } from '@/lib/youtube';
 import {
   Provider,
   Platform,
@@ -28,6 +29,7 @@ const LS_API_KEY = 'ss_api_key';
 const LS_HISTORY = 'ss_history';
 const LS_UNSPLASH_KEY = 'ss_unsplash_key';
 const LS_OPENAI_IMAGE_KEY = 'ss_openai_image_key';
+const LS_YOUTUBE_KEY = 'ss_youtube_key';
 
 
 /** 요청은 끝났는데 결과가 없는 플랫폼. 조용히 사라지지 않고 왜 비었는지 알린다 */
@@ -96,6 +98,7 @@ export default function Home() {
   const [unsplashKey, setUnsplashKey] = useState('');
   const [openaiImageKey, setOpenaiImageKey] = useState('');
   const [imageModelMsg, setImageModelMsg] = useState<string | null>(null);
+  const [youtubeKey, setYoutubeKey] = useState('');
   const [submittedPlatforms, setSubmittedPlatforms] = useState<Set<Platform>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<string[]>([]);
@@ -133,6 +136,7 @@ export default function Home() {
     const savedHistory = read(LS_HISTORY);
     const savedUnsplashKey = read(LS_UNSPLASH_KEY);
     const savedOpenaiImageKey = read(LS_OPENAI_IMAGE_KEY);
+    const savedYoutubeKey = read(LS_YOUTUBE_KEY);
 
     if (savedProvider) setProvider(savedProvider);
     if (savedKey) setApiKey(savedKey);
@@ -146,6 +150,7 @@ export default function Home() {
     }
     if (savedUnsplashKey) setUnsplashKey(savedUnsplashKey);
     if (savedOpenaiImageKey) setOpenaiImageKey(savedOpenaiImageKey);
+    if (savedYoutubeKey) setYoutubeKey(savedYoutubeKey);
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -182,6 +187,11 @@ export default function Home() {
   function handleOpenaiImageKeyChange(key: string) {
     setOpenaiImageKey(key);
     localStorage.setItem(LS_OPENAI_IMAGE_KEY, key);
+  }
+
+  function handleYoutubeKeyChange(key: string) {
+    setYoutubeKey(key);
+    localStorage.setItem(LS_YOUTUBE_KEY, key);
   }
 
   function togglePlatform(platform: Platform) {
@@ -294,6 +304,7 @@ export default function Home() {
           submittedUrl, provider, apiKey, Array.from(platformsSnapshot),
           unsplashKey || undefined,
           provider === 'openai' ? apiKey : openaiImageKey || undefined,
+          youtubeKey || undefined,
         );
 
         if ('error' in result && result.error) {
@@ -321,6 +332,8 @@ export default function Home() {
   }
 
   const canSubmit = !!apiKey && !!url && !isPending && selectedPlatforms.size > 0;
+  const isYoutube = youtubeVideoId(url.trim()) !== null;
+
   const hasResults = (summaries && Object.keys(summaries).length > 0) || instagramPost || instagramPhotoPost;
   const resultCount = submittedPlatforms.size;
 
@@ -356,6 +369,21 @@ export default function Home() {
           required
           className="w-full border-0 border-b-2 border-[var(--ink)] bg-transparent pt-2 pb-3 px-0.5 text-lg sm:text-[21px] tracking-[-0.2px] placeholder:text-[var(--faint)] focus:outline-none focus:border-b-[3px]"
         />
+
+        {/* 유튜브 주소일 때만 보여준다. 평소에는 있을 이유가 없는 칸이다 */}
+        {isYoutube && (
+          <div className="mt-3.5 p-4 border border-dashed border-[var(--hair)] bg-[var(--card)]">
+            <KeyField
+              label="YouTube Data API Key"
+              value={youtubeKey}
+              onChange={handleYoutubeKeyChange}
+              hint="유튜브가 서버에서 온 요청을 막기 때문에 이 키가 있어야 영상 정보를 읽습니다. 무료이고, Google Cloud 콘솔에서 YouTube Data API v3 를 켜면 발급됩니다"
+            />
+            <p className="mt-2 text-[11px] text-[var(--soft)]">
+              자막은 받아올 수 없습니다. 제목·채널·길이·태그와 설명란까지만 읽어 요약합니다
+            </p>
+          </div>
+        )}
 
         {history.length > 0 && (
           <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">

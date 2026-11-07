@@ -32,13 +32,13 @@ function validateUrl(url: string): void {
   }
 }
 
-export async function extractContent(url: string): Promise<ExtractResult> {
+export async function extractContent(url: string, youtubeKey?: string): Promise<ExtractResult> {
   validateUrl(url);
 
   // 유튜브는 긁어서 될 페이지가 아니다. 전용 경로로 보낸다
   const videoId = youtubeVideoId(url);
   if (videoId) {
-    const doc = await fetchYoutube(videoId);
+    const doc = await fetchYoutube(videoId, youtubeKey);
     return { ...doc, images: [] };
   }
 

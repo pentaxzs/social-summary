@@ -3,11 +3,18 @@
  * 영상 내용이 없다. 그대로 긁으면 푸터의 약관·저작권 문구 339자가 남고,
  * 그게 "본문"으로 넘어가 AI 가 유튜브 이용약관을 요약해버린다.
  *
- * 자막은 쓸 수 없다. 자막 목록은 HTML 에 들어 있지만 실제 자막 파일을
+ * 긁는 방식은 배포 환경에서 아예 통하지 않는다. 내 노트북에서는 설명란이
+ * 멀쩡히 나오는데 Vercel 에서는 같은 요청에 captcha 안내가 섞인 다른
+ * 페이지가 온다 — 데이터센터 IP 를 자동화 트래픽으로 보기 때문이다.
+ * 로컬에서만 되는 길이라 믿고 쓸 수 없다.
+ *
+ * 자막도 쓸 수 없다. 자막 목록은 HTML 에 들어 있지만 실제 자막 파일을
  * 요청하면 200 에 빈 응답이 온다 (서명 파라미터를 요구하도록 막혀 있다).
  *
- * 그래서 영상에 딸린 정보 — 제목, 채널, 길이, 태그, 설명란 — 만 모은다.
- * 영상을 본 것이 아니라는 점은 본문 머리에 적어 둔다.
+ * 그래서 정식 경로인 YouTube Data API 를 쓴다. 키가 없으면 긁어보고,
+ * 막히면 왜 막혔는지 그대로 알려준다. 어느 쪽이든 모으는 것은 같다 —
+ * 제목, 채널, 길이, 태그, 설명란. 영상을 본 것이 아니라는 점은
+ * 본문 머리에 적어 둔다.
  */
 
 const ID = /^[\w-]{11}$/;
@@ -73,58 +80,46 @@ interface VideoDetails {
   shortDescription?: string;
 }
 
-function runtime(seconds: string | undefined): string | null {
-  const total = Number(seconds);
-  if (!Number.isFinite(total) || total <= 0) return null;
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return m > 0 ? `${m}분 ${s}초` : `${s}초`;
-}
-
 export interface YoutubeDoc {
   title: string;
   content: string;
 }
 
-export async function fetchYoutube(id: string): Promise<YoutubeDoc> {
-  const res = await fetch(`https://www.youtube.com/watch?v=${id}`, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SocialSummaryBot/1.0)' },
-    signal: AbortSignal.timeout(10000),
-  });
-  if (!res.ok) {
-    throw new Error(`유튜브 페이지를 불러올 수 없습니다 (HTTP ${res.status})`);
-  }
+interface VideoFacts {
+  title: string;
+  author?: string;
+  seconds?: number;
+  keywords?: string[];
+  description: string;
+}
 
-  const html = await res.text();
-  const raw = sliceObject(html, '"videoDetails":');
-  if (!raw) {
-    throw new Error('영상 정보를 찾지 못했습니다. 비공개이거나 삭제된 영상일 수 있습니다.');
-  }
+/** ISO 8601 (PT25M41S) → 초 */
+function isoToSeconds(iso: string | undefined): number | undefined {
+  const m = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/.exec(iso || '');
+  if (!m) return undefined;
+  return Number(m[1] || 0) * 3600 + Number(m[2] || 0) * 60 + Number(m[3] || 0);
+}
 
-  let details: VideoDetails;
-  try {
-    details = JSON.parse(raw) as VideoDetails;
-  } catch {
-    throw new Error('영상 정보를 읽지 못했습니다. 잠시 후 다시 시도해주세요.');
-  }
+const NO_DESCRIPTION =
+  '이 영상은 설명란이 거의 비어 있어 요약할 내용이 없습니다. '
+  + '영상 내용은 자막을 받아올 수 없어 읽지 못합니다.';
 
-  const title = (details.title || '').trim();
-  const description = (details.shortDescription || '').trim();
+const BLOCKED =
+  '유튜브가 서버에서 온 요청을 막았습니다. 영상 정보를 읽으려면 '
+  + 'YouTube Data API 키가 필요합니다. 주소창 아래 칸에 넣어주세요.';
 
-  // 설명란이 거의 비어 있으면 요약할 거리가 없다.
-  // 억지로 만들면 제목 한 줄을 부풀린 글이 나온다
-  if (description.length < 80) {
-    throw new Error(
-      '이 영상은 설명란이 거의 비어 있어 요약할 내용이 없습니다. '
-      + '영상 내용은 자막을 받아올 수 없어 읽지 못합니다.',
-    );
-  }
+function buildDoc(f: VideoFacts): YoutubeDoc {
+  if (f.description.trim().length < 80) throw new Error(NO_DESCRIPTION);
+
+  const runtimeText = f.seconds && f.seconds > 0
+    ? (f.seconds >= 60 ? `${Math.floor(f.seconds / 60)}분 ${f.seconds % 60}초` : `${f.seconds}초`)
+    : null;
 
   const facts = [
-    `제목: ${title}`,
-    details.author ? `채널: ${details.author}` : null,
-    runtime(details.lengthSeconds) ? `길이: ${runtime(details.lengthSeconds)}` : null,
-    details.keywords?.length ? `태그: ${details.keywords.slice(0, 12).join(', ')}` : null,
+    `제목: ${f.title}`,
+    f.author ? `채널: ${f.author}` : null,
+    runtimeText ? `길이: ${runtimeText}` : null,
+    f.keywords?.length ? `태그: ${f.keywords.slice(0, 12).join(', ')}` : null,
   ].filter(Boolean).join('\n');
 
   const content = [
@@ -135,8 +130,80 @@ export async function fetchYoutube(id: string): Promise<YoutubeDoc> {
     facts,
     '',
     '설명란:',
-    description,
+    f.description.trim(),
   ].join('\n').slice(0, 8000);
 
-  return { title, content };
+  return { title: f.title, content };
+}
+
+/** 정식 경로. 데이터센터에서도 막히지 않는다 */
+async function fetchViaApi(id: string, apiKey: string): Promise<YoutubeDoc> {
+  const params = new URLSearchParams({
+    part: 'snippet,contentDetails',
+    id,
+    key: apiKey,
+  });
+  const res = await fetch(`https://www.googleapis.com/youtube/v3/videos?${params}`, {
+    signal: AbortSignal.timeout(10000),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    const message = (() => {
+      try { return JSON.parse(body)?.error?.message as string | undefined; } catch { return undefined; }
+    })();
+    if (res.status === 400 || res.status === 403) {
+      throw new Error(`YouTube Data API 키를 거부했습니다: ${message || `HTTP ${res.status}`}`);
+    }
+    throw new Error(`유튜브 정보를 불러오지 못했습니다 (HTTP ${res.status})`);
+  }
+
+  const data = await res.json();
+  const item = data.items?.[0];
+  if (!item) {
+    throw new Error('영상을 찾지 못했습니다. 비공개이거나 삭제된 영상일 수 있습니다.');
+  }
+
+  return buildDoc({
+    title: (item.snippet?.title || '').trim(),
+    author: item.snippet?.channelTitle,
+    seconds: isoToSeconds(item.contentDetails?.duration),
+    keywords: item.snippet?.tags,
+    description: item.snippet?.description || '',
+  });
+}
+
+export async function fetchYoutube(id: string, apiKey?: string): Promise<YoutubeDoc> {
+  if (apiKey) return fetchViaApi(id, apiKey);
+
+  const res = await fetch(`https://www.youtube.com/watch?v=${id}`, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SocialSummaryBot/1.0)' },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) {
+    throw new Error(`유튜브 페이지를 불러올 수 없습니다 (HTTP ${res.status})`);
+  }
+
+  const html = await res.text();
+  const raw = sliceObject(html, '"videoDetails":');
+  if (!raw) throw new Error(BLOCKED);
+
+  let details: VideoDetails;
+  try {
+    details = JSON.parse(raw) as VideoDetails;
+  } catch {
+    throw new Error(BLOCKED);
+  }
+
+  // 차단된 페이지에도 videoDetails 라는 글자는 있지만 설명란은 없다.
+  // 설명란이 통째로 빠진 것과 원래 짧은 것을 구분해야 안내가 맞는다
+  if (typeof details.shortDescription !== 'string') throw new Error(BLOCKED);
+
+  return buildDoc({
+    title: (details.title || '').trim(),
+    author: details.author,
+    seconds: Number(details.lengthSeconds) || undefined,
+    keywords: details.keywords,
+    description: details.shortDescription,
+  });
 }
