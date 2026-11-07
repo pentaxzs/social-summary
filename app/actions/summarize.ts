@@ -107,14 +107,14 @@ READING THE SOURCE
 - Never invent results, numbers, personal experience or product capability. If the source does
   not say it, it does not go in the post.
 
-CHOOSING THE COMMUNITY
-- Recommend one subreddit and say in a sentence or two why that audience would care.
+WHO IT IS FOR
+- Write for the subreddit where this would actually land, but do not name it in the output.
+  Knowing the audience shapes the post; recommending a community is not your job here.
 - You cannot browse Reddit, so you do not know any community's current rules, permitted post
   types or flairs. Never state a rules status, never name a flair, never claim a post type is
   allowed. Leave all of that out rather than guessing at it.
-- If the obvious subreddit is widely known to restrict this kind of post — self-promotion,
-  AI-written content, blog links — put that in WARNINGS and name an allowed alternative. Do not
-  disguise promotion to get around a rule.
+- If this kind of post is widely restricted — self-promotion, AI-written content, blog links —
+  say so under NOTICE. Do not disguise promotion to get around a rule.
 
 VOICE
 - Natural conversational English. Write like a practitioner, not a brand.
@@ -145,9 +145,12 @@ Cut repeated explanation, generic background, promotional language, subscribe or
 duplicate links, and any claim the source does not support.
 
 LINKS
-Only what is necessary and relevant. Prefer the primary source, repository, demo or original
-article. Disclose authorship or commercial interest where it applies. No shorteners, no
-misleading redirects. Never suggest hiding a link in the comments.
+The source URL is the one link that always belongs there — it is where the post came from and
+the reader's way back to it. Add others only when the source itself points to them and they
+are worth opening: a repository, a demo, a paper, the original article behind the source.
+Do not invent a link, and do not add one the source never mentions. Disclose authorship or
+commercial interest where it applies. No shorteners, no misleading redirects. Never suggest
+hiding a link in the comments.
 
 CLOSING
 End with one specific, genuine question when a question fits — one that invites practical
@@ -157,7 +160,7 @@ and never ask for upvotes.
 BEFORE ANSWERING, CHECK
 Faithful to the source. Relevant to that community. Factually accurate. Natural English. Clear
 structure. Low promotional intensity. Useful. Right length. Worth replying to.
-If the source contradicts itself, or you had to guess at anything, put it in WARNINGS rather
+If the source contradicts itself, or you had to guess at anything, put it under NOTICE rather
 than smoothing it over.${extra ? `
 
 THIS TIME
@@ -168,9 +171,6 @@ Reply with exactly these sections, in this order, with these headers, and nothin
 Write every section in English. Do not add a section for anything you cannot actually
 determine from here.
 
-SUBREDDIT
-r/<name> — why this audience
-
 TITLES
 1. <experience-driven>
 2. <problem-driven>
@@ -179,20 +179,18 @@ TITLES
 POST
 <the complete post body, ready to paste>
 
-WORD COUNT
-<number> words (post body only)
-
 LINKS
-- <link and why it belongs>
+- <the source URL> — the article this post came from
+- <any further link the source itself points to> — what it is
 
-NOTES
+WHAT CHANGED
 What you emphasised, condensed or left out, and why. Two or three lines.
 
-WARNINGS
+NOTICE
 Only things you actually know: a claim the source does not support, something you had to
-guess at, a disclosure the author owes, a community that is known to restrict this kind of
-post. Write "None" if there is nothing. Do not pad this with generic advice to go and read
-the subreddit rules.
+guess at, a disclosure the author owes, a kind of post that is widely restricted. Write
+"None" if there is nothing. Do not pad this with generic advice to go and read the
+subreddit rules.
 `.trim();
 
 /** Reddit 은 영문이라 다시 만들기 지시도 영문이어야 한다 */
