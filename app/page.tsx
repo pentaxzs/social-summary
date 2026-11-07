@@ -63,6 +63,7 @@ export default function Home() {
   const [openaiImageKey, setOpenaiImageKey] = useState('');
   const [imageModelMsg, setImageModelMsg] = useState<string | null>(null);
   const [youtubeKey, setYoutubeKey] = useState('');
+  const urlRef = useRef<HTMLInputElement>(null);
   const [submittedPlatforms, setSubmittedPlatforms] = useState<Set<Platform>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<string[]>([]);
@@ -324,15 +325,31 @@ export default function Home() {
         <label htmlFor="article-url" className="np-label block border-b-2 border-[var(--ink)] pb-1.5 mb-3">
           요약할 글 주소
         </label>
-        <input
-          id="article-url"
-          type="url"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder="https://example.com/article"
-          required
-          className="w-full border-0 border-b-2 border-[var(--ink)] bg-transparent pt-2 pb-3 px-0.5 text-lg sm:text-[21px] tracking-[-0.2px] placeholder:text-[var(--faint)] focus:outline-none focus:border-b-[3px]"
-        />
+        {/* 긴 주소를 지우려면 전체 선택부터 해야 했다. 값이 있을 때만 지우기 단추를 둔다 */}
+        <div className="relative border-b-2 border-[var(--ink)] focus-within:border-b-[3px]">
+          <input
+            ref={urlRef}
+            id="article-url"
+            type="url"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://example.com/article"
+            required
+            className="w-full border-0 bg-transparent pt-2 pb-3 pl-0.5 pr-11 text-lg sm:text-[21px] tracking-[-0.2px] placeholder:text-[var(--faint)] focus:outline-none"
+          />
+          {url && (
+            <button
+              type="button"
+              onClick={() => { setUrl(''); urlRef.current?.focus(); }}
+              aria-label="주소 지우기"
+              className="absolute right-0 bottom-3 w-8 h-8 flex items-center justify-center rounded-full text-[var(--soft)] hover:text-[var(--ink)] hover:bg-[var(--hair)]/60 transition-colors"
+            >
+              <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden>
+                <path d="M2 2 L13 13 M13 2 L2 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            </button>
+          )}
+        </div>
 
         {history.length > 0 && (
           <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
