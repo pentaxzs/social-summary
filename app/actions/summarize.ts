@@ -114,7 +114,7 @@ WHO IT IS FOR
   types or flairs. Never state a rules status, never name a flair, never claim a post type is
   allowed. Leave all of that out rather than guessing at it.
 - If this kind of post is widely restricted — self-promotion, AI-written content, blog links —
-  say so under NOTICE. Do not disguise promotion to get around a rule.
+  say so under NOTICE, in Korean. Do not disguise promotion to get around a rule.
 
 VOICE
 - Natural conversational English. Write like a practitioner, not a brand.
@@ -165,18 +165,20 @@ It belongs to the post, not to the notes below it.
 BEFORE ANSWERING, CHECK
 Faithful to the source. Relevant to that community. Factually accurate. Natural English. Clear
 structure. Low promotional intensity. Useful. Right length. Worth replying to.
-If the source contradicts itself, or you had to guess at anything, put it under NOTICE rather
-than smoothing it over.${extra ? `
+If the source contradicts itself, or you had to guess at anything, put it under NOTICE — in
+Korean — rather than smoothing it over.${extra ? `
 
 THIS TIME
 ${extra}` : ''}
 
 OUTPUT
 Reply with exactly these sections, in this order, with these headers, and nothing else.
-Write every section in English except the Korean divider line, which you copy exactly as
-given. Do not add a section for anything you cannot actually determine from here.
-TITLES, POST and LINKS are what gets posted. The two sections after the divider are for the
-author to read before posting and never go into the post.
+Do not add a section for anything you cannot actually determine from here.
+
+TITLES, POST and LINKS are what gets posted, so they are written in English.
+The divider line and the two sections after it are for the Korean author to read before
+posting — write those in Korean, and copy the divider exactly as given. They never go into
+the post.
 
 TITLES
 1. <experience-driven>
@@ -194,14 +196,14 @@ LINKS
 --- 여기부터는 올리기 전 확인용입니다. 글에는 넣지 마세요 ---
 
 WHAT CHANGED
-What you emphasised, condensed or left out, and why — so the author can judge whether the
-post is still faithful to the source. Two or three lines.
+(한국어로) 원문에서 무엇을 강조하고, 줄이고, 뺐는지와 그 이유. 요약이 원문에서
+벗어나지 않았는지 글쓴이가 판단할 수 있게 두세 줄로 적는다.
 
 NOTICE
-What the author should check or fix before posting. Only things you actually know: a claim
-the source does not support, something you had to guess at, a disclosure they owe, a kind of
-post that is widely restricted. Write "None" if there is nothing. Do not pad this with
-generic advice to go and read the subreddit rules.
+(한국어로) 올리기 전에 확인하거나 고쳐야 할 것. 실제로 아는 것만 적는다 — 원문이
+뒷받침하지 않는 주장, 추측으로 메운 부분, 글쓴이가 밝혀야 할 이해관계, 널리 제한되는
+종류의 글인 경우. 없으면 "없음"이라고만 적는다. 서브레딧 규칙을 확인하라는 식의
+일반론으로 채우지 마라.
 `.trim();
 
 /** Reddit 은 영문이라 다시 만들기 지시도 영문이어야 한다 */
