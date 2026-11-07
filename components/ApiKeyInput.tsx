@@ -42,20 +42,28 @@ export function ApiKeyInput({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={expanded}
-        className="flex items-center gap-2.5 w-full py-2 border-b border-[var(--hair)] text-[11px] tracking-[0.1em] uppercase text-left"
+        className="flex items-start gap-2.5 w-full py-2 border-b border-[var(--hair)] text-[11px] tracking-[0.1em] uppercase text-left"
       >
         <span
-          className="w-1.5 h-1.5 rounded-full shrink-0"
+          className="w-1.5 h-1.5 rounded-full shrink-0 mt-[5px]"
           style={{ background: hydrated && apiKey ? '#2d6a44' : '#a8541c' }}
         />
-        <span className="min-w-0 truncate">
+        {/* 접힌 상태에서도 이 안에 무엇이 들어있는지 보여야 한다.
+            유튜브 키를 여기 넣을 수 있다는 걸 알 길이 없었다 */}
+        <span className="min-w-0 leading-snug">
           {config.label}
           <span className="text-[var(--soft)] normal-case tracking-normal">
             {' · '}
-            {hydrated && apiKey ? 'API 키 설정됨' : 'API 키 필요'}
+            <span className="whitespace-nowrap">
+              {hydrated && apiKey ? 'API 키 설정됨' : 'API 키 필요'}
+            </span>
+            {' · '}
+            <span className="whitespace-nowrap">
+              {hydrated && youtubeKey ? 'YouTube 키 설정됨' : 'YouTube 키 없음'}
+            </span>
           </span>
         </span>
-        <span className="ml-auto shrink-0 text-[var(--soft)]">{expanded ? '접기 ▴' : '변경 ▾'}</span>
+        <span className="ml-auto shrink-0 text-[var(--soft)] mt-[1px]">{expanded ? '접기 ▴' : '변경 ▾'}</span>
       </button>
 
       {expanded && (
