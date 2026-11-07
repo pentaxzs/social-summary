@@ -431,6 +431,9 @@ export default function Home() {
               </button>
             );
           })}
+          {/* 마지막 줄 끝을 막는 빈 칸. 7개라 2열에서는 하나, 3열에서는 둘이 빈다 */}
+          <span aria-hidden className="border-r border-b border-[var(--hair)]" />
+          <span aria-hidden className="hidden sm:block border-r border-b border-[var(--hair)]" />
         </div>
 
         {/* Instagram w/photo 추가 키 */}

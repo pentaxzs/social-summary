@@ -40,11 +40,31 @@ export interface PlatformMeta {
   color: string;
 }
 
+/**
+ * Reddit 은 영문이라 같은 지시를 그대로 줄 수 없다.
+ * english 쪽은 한국어 지시의 번역이 아니라, 레딧에서 통하는 결로 다시 썼다.
+ */
 export const TONES = [
-  { key: 'casual',       label: '캐주얼하게', instruction: '친구에게 말하듯 편안한 구어체로. 격식은 빼되 내용은 유지.' },
-  { key: 'professional', label: '전문적으로', instruction: '업무 문서 수준의 정제된 문장으로. 감탄사와 이모지는 줄인다.' },
-  { key: 'friendly',     label: '친근하게',   instruction: '따뜻하고 다정한 말투로. 독자를 배려하는 어조.' },
-  { key: 'assertive',    label: '단호하게',   instruction: '주장을 분명히 드러내는 단정적인 어조로. 군더더기를 걷어낸다.' },
+  {
+    key: 'casual', label: '캐주얼하게',
+    instruction: '친구에게 말하듯 편안한 구어체로. 격식은 빼되 내용은 유지.',
+    english: 'Loosen it up. Write the way you would in a comment thread — contractions, short sentences, no throat-clearing.',
+  },
+  {
+    key: 'professional', label: '전문적으로',
+    instruction: '업무 문서 수준의 정제된 문장으로. 감탄사와 이모지는 줄인다.',
+    english: 'Tighten it up. Precise, measured, no slang. Still a person writing, not a press release.',
+  },
+  {
+    key: 'friendly', label: '친근하게',
+    instruction: '따뜻하고 다정한 말투로. 독자를 배려하는 어조.',
+    english: 'Warmer. Acknowledge the reader, admit what you are unsure about, invite them in.',
+  },
+  {
+    key: 'assertive', label: '단호하게',
+    instruction: '주장을 분명히 드러내는 단정적인 어조로. 군더더기를 걷어낸다.',
+    english: 'Take a position and defend it. Lead with the claim, cut the hedging, keep the evidence.',
+  },
 ] as const;
 
 export type Tone = (typeof TONES)[number]['key'];
@@ -57,6 +77,8 @@ export interface PlatformSummaries {
   thread: string;
   linkedin: string;
   geekNews: string;
+  /** 유일한 영문 플랫폼. 다른 카드와 규칙이 전혀 다르다 */
+  reddit: string;
 }
 
 export type TextPlatform = keyof PlatformSummaries;
@@ -131,7 +153,7 @@ export interface SummarizeError {
   error: string;
 }
 
-export const ALL_PLATFORMS: Platform[] = ['twitter', 'thread', 'linkedin', 'geekNews', 'instagram', 'instagramPhoto'];
+export const ALL_PLATFORMS: Platform[] = ['twitter', 'thread', 'linkedin', 'geekNews', 'instagram', 'instagramPhoto', 'reddit'];
 
 export const PLATFORM_LABELS_ALL: Record<Platform, string> = {
   twitter: '𝕏 Twitter',
@@ -140,6 +162,7 @@ export const PLATFORM_LABELS_ALL: Record<Platform, string> = {
   geekNews: '🤓 Geek News',
   instagram: '📸 Instagram',
   instagramPhoto: '🖼️ Instagram w/photo',
+  reddit: '👽 Reddit',
 };
 
 export type SummarizeResponse = SummarizeResult | SummarizeError;
@@ -149,6 +172,10 @@ export const PLATFORM_LIMITS: Record<keyof PlatformSummaries, number> = {
   thread: 500,
   linkedin: 800,
   geekNews: 1200,
+  // Reddit 은 글자가 아니라 단어로 길이를 센다 (Deep Dive 가 900단어).
+  // 게다가 제목 후보·주의사항까지 함께 나오므로, 이 값은 자르기 위한
+  // 기준이 아니라 터무니없이 길 때만 걸리는 상한이다
+  reddit: 9000,
 } as const;
 
 export const PLATFORM_LABELS: Record<keyof PlatformSummaries, string> = {
@@ -156,6 +183,7 @@ export const PLATFORM_LABELS: Record<keyof PlatformSummaries, string> = {
   thread: '🧵 Thread',
   linkedin: '💼 LinkedIn',
   geekNews: '🤓 Geek News',
+  reddit: '👽 Reddit',
 };
 
 export const PLATFORM_META: Record<Platform, PlatformMeta> = {
@@ -165,4 +193,5 @@ export const PLATFORM_META: Record<Platform, PlatformMeta> = {
   geekNews:       { no: '04', label: 'Geek News',  color: '#7a3d12' },
   instagram:      { no: '05', label: 'Instagram',  color: '#6e1b33' },
   instagramPhoto: { no: '06', label: '사진 카드',   color: '#6e1b33' },
+  reddit:         { no: '07', label: 'Reddit',     color: '#9c3416' },
 };

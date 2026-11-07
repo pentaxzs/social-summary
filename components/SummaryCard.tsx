@@ -36,7 +36,10 @@ export function SummaryCard({
   const meta = PLATFORM_META[platform];
   const limit = PLATFORM_LIMITS[platform];
   const count = text.length;
-  const over = count > limit;
+  // Reddit 은 길이를 단어로 센다. 본문 word count 는 결과 안에 적혀 나오므로
+  // 여기서 글자 수 상한을 들이대면 지켜야 할 기준인 양 보인다
+  const showsLimit = platform !== 'reddit';
+  const over = showsLimit && count > limit;
 
   useEffect(() => {
     if (!toneOpen) return;
@@ -86,7 +89,9 @@ export function SummaryCard({
             over ? 'font-bold text-[#8a2a12]' : 'text-[var(--soft)]'
           }`}
         >
-          {count.toLocaleString()} / {limit.toLocaleString()}자
+          {showsLimit
+            ? `${count.toLocaleString()} / ${limit.toLocaleString()}자`
+            : `${count.toLocaleString()}자`}
         </span>
       </div>
 

@@ -43,7 +43,10 @@ function createModel(provider: Provider, apiKey: string) {
   }
 }
 
-const PLATFORM_INSTRUCTIONS: Record<TextPlatform, string> = {
+/** 한 번의 JSON 호출로 함께 만드는 한국어 플랫폼들. Reddit 은 여기 끼지 않는다 */
+type JsonPlatform = Exclude<TextPlatform, 'reddit'>;
+
+const PLATFORM_INSTRUCTIONS: Record<JsonPlatform, string> = {
   twitter: `- twitter: 200자 이상 ${PLATFORM_LIMITS.twitter}자 이하. 핵심만 담은 간결하고 임팩트 있는 문장.`,
   thread: `- thread: 400자 이상 ${PLATFORM_LIMITS.thread}자 이하. 조금 더 상세하게, 대화체로.`,
   linkedin: `- linkedin: 700자 이상 ${PLATFORM_LIMITS.linkedin}자 이하. 전문적인 톤. 반드시 아래 구조를 지켜줘:
@@ -55,7 +58,7 @@ const PLATFORM_INSTRUCTIONS: Record<TextPlatform, string> = {
   geekNews: `- geekNews: 1000자 이상 ${PLATFORM_LIMITS.geekNews}자 이하. IT 커뮤니티 대상, 기술적 관점 강조, 핵심 기술/수치 포함. 주요 내용은 반드시 bullet(•) 형식으로 표현.`,
 };
 
-const SUMMARY_PROMPT = (title: string, content: string, platforms: TextPlatform[]) => `
+const SUMMARY_PROMPT = (title: string, content: string, platforms: JsonPlatform[]) => `
 다음 글을 ${platforms.length}개 플랫폼에 맞게 요약해줘. 각 요약은 한국어로 작성하고 글자 수 제한을 반드시 지켜야 해. 한국어 맞춤법에 맞게 띄어쓰기를 정확히 지켜줘.
 
 제목: ${title}
@@ -73,6 +76,133 @@ ${platforms.map((p) => PLATFORM_INSTRUCTIONS[p]).join('\n')}
 ${platforms.map((p) => `  "${p}": "..."`).join(',\n')}
 }
 `.trim();
+
+/**
+ * Reddit 은 이 앱에서 유일한 영문·해외 독자용 카드다.
+ *
+ * 다른 카드처럼 한국어 요약을 만드는 일이 아니라, 원문에서 쓸 만한 것만
+ * 골라 영어권 커뮤니티에 올릴 글로 다시 쓰는 일이다. 그래서 같은 JSON
+ * 호출에 섞지 않고 따로 부른다 — 언어도 길이 기준도 마크다운 허용 여부도
+ * 전부 다르다.
+ *
+ * 레딧을 직접 둘러볼 수 없으므로 커뮤니티 규칙과 플레어는 확인할 방법이
+ * 없다. 지어내지 않고 Unverified 로 돌려주게 한다.
+ */
+const REDDIT_PROMPT = (title: string, content: string, url: string, extra?: string) => `
+You are adapting a source article into a Reddit post for an English-speaking, global audience.
+This is not a translation and not a summary. Take what is genuinely useful in the source and
+rewrite it as a post a real person would publish.
+
+SOURCE
+Title: ${title}
+URL: ${url}
+Body:
+${content}
+
+READING THE SOURCE
+- Find its main argument, who it is for, and what in it is actually new.
+- Keep concrete experience, evidence, examples, lessons, technical detail and stated limits.
+- Separate verified fact from opinion. Note whether the author describes their own work or
+  someone else's, and preserve attribution.
+- Never invent results, numbers, personal experience or product capability. If the source does
+  not say it, it does not go in the post.
+
+CHOOSING THE COMMUNITY
+- Recommend one subreddit and say in a sentence or two why that audience would care.
+- You cannot browse Reddit, so you cannot confirm any community's current rules, permitted post
+  types or flairs. Report the rules status as Unverified and say exactly what to check before
+  posting. Never invent a flair. Never claim a post type is allowed.
+- If the obvious subreddit commonly restricts this kind of post — self-promotion, AI-written
+  content, blog links — say so and name an allowed alternative. Do not disguise promotion to
+  get around a rule.
+
+VOICE
+- Natural conversational English. Write like a practitioner, not a brand.
+- First person only when the source supports it and the author is the one posting.
+- Specific observations over sweeping claims. Direct and informative, never sensational.
+- No corporate jargon, no marketing lines, no generic AI opener, no exaggeration.
+- Do not insert a personal anecdote that is not in the source. No emoji, no hashtags.
+
+TITLES — three options, one of each kind
+1. Experience-driven  2. Problem-driven  3. Insight-driven
+Aim for 45-100 characters. Descriptive, specific, honest about what the post contains.
+No clickbait, no ALL CAPS.
+
+STRUCTURE — pick the one that fits the source, do not force it
+Experience / Build log:  Hook -> Problem -> Experiment -> Lessons -> Discussion
+Insight / Opinion:       Observation -> Argument -> Evidence -> Implications -> Question
+Resource / Tutorial:     Problem -> Solution -> Usage -> Limitations -> Resource
+Discussion:              Context -> Finding -> Perspectives -> Specific question
+
+LENGTH
+Standard 250-500 words. Short 120-250. Deep dive 500-900. Use Standard unless told otherwise.
+Short paragraphs. Reddit markdown headings and lists only where they earn their place.
+Substance over hitting a word count.
+
+KEEP / CUT
+Keep the problem, the unique insight, concrete evidence, real limitations, practical lessons.
+Cut repeated explanation, generic background, promotional language, subscribe or follow asks,
+duplicate links, and any claim the source does not support.
+
+LINKS
+Only what is necessary and relevant. Prefer the primary source, repository, demo or original
+article. Disclose authorship or commercial interest where it applies. No shorteners, no
+misleading redirects. Never suggest hiding a link in the comments.
+
+CLOSING
+End with one specific, genuine question when a question fits — one that invites practical
+experience, an alternative approach, or informed disagreement. Never "What do you think?"
+and never ask for upvotes.
+
+BEFORE ANSWERING, CHECK
+Faithful to the source. Relevant to that community. Factually accurate. Natural English. Clear
+structure. Low promotional intensity. Useful. Right length. Worth replying to.
+If the source contradicts itself, or you had to guess at anything, put it in WARNINGS rather
+than smoothing it over.${extra ? `
+
+THIS TIME
+${extra}` : ''}
+
+OUTPUT
+Reply with exactly these sections, in this order, with these headers, and nothing else.
+Write every section in English.
+
+SUBREDDIT
+r/<name> — why this audience
+
+RULES STATUS
+Unverified — what to check before posting
+
+TITLES
+1. <experience-driven>
+2. <problem-driven>
+3. <insight-driven>
+
+FLAIR
+Unverified — how to pick one once you can see the list
+
+POST
+<the complete post body, ready to paste>
+
+WORD COUNT
+<number> words (post body only)
+
+LINKS
+- <link and why it belongs>
+
+NOTES
+What you emphasised, condensed or left out, and why. Two or three lines.
+
+WARNINGS
+Anything to fix or confirm before posting. Write "None" if there is nothing.
+`.trim();
+
+/** Reddit 은 영문이라 다시 만들기 지시도 영문이어야 한다 */
+const REDDIT_REGENERATE_INSTRUCTIONS: Record<RegenerateMode, string> = {
+  regenerate: 'Write it again from a different angle. New opening, different structure, no sentence reused.',
+  shorter: 'Use the Short length: 120-250 words in the post body. Cut material out; do not pack the same content into denser sentences.',
+  ...Object.fromEntries(TONES.map((t) => [t.key, t.english])),
+} as Record<RegenerateMode, string>;
 
 const INSTAGRAM_PROMPT = (title: string, content: string) => `
 당신은 인스타그램 카드뉴스 전문 콘텐츠 기획자입니다.
@@ -216,12 +346,15 @@ export async function summarizeUrl(
     const { title, content } = await extractContent(url);
     const model = createModel(provider, apiKey);
 
-    const textPlatforms = selectedPlatforms.filter((p): p is TextPlatform => p !== 'instagram' && p !== 'instagramPhoto');
+    const textPlatforms = selectedPlatforms.filter(
+      (p): p is JsonPlatform => p !== 'instagram' && p !== 'instagramPhoto' && p !== 'reddit',
+    );
     const includeInstagram = selectedPlatforms.includes('instagram');
     const includeInstagramPhoto = selectedPlatforms.includes('instagramPhoto');
+    const includeReddit = selectedPlatforms.includes('reddit');
 
     // 선택된 플랫폼만 병렬 호출
-    const [textResult, instaResult, instaPhotoTextResult] = await Promise.allSettled([
+    const [textResult, instaResult, instaPhotoTextResult, redditResult] = await Promise.allSettled([
       textPlatforms.length > 0
         ? generateText({ model, prompt: SUMMARY_PROMPT(title, content, textPlatforms) })
         : Promise.resolve(null),
@@ -230,6 +363,9 @@ export async function summarizeUrl(
         : Promise.resolve(null),
       includeInstagramPhoto
         ? generateText({ model, prompt: INSTAGRAM_PROMPT(title, content) })
+        : Promise.resolve(null),
+      includeReddit
+        ? generateText({ model, prompt: REDDIT_PROMPT(title, content, url) })
         : Promise.resolve(null),
     ]);
 
@@ -263,6 +399,19 @@ export async function summarizeUrl(
       // 원문 링크 추가
       for (const key of textPlatforms) {
         summaries[key] = withSourceLink(key, summaries[key]!, url);
+      }
+    }
+
+    // Reddit — 영문 구조 출력이라 마크다운을 지우거나 문장 단위로 자르면 망가진다.
+    // 링크도 프롬프트가 알아서 고르므로 뒤에 붙이지 않는다
+    if (includeReddit) {
+      if (redditResult.status === 'rejected') {
+        if (textPlatforms.length === 0 && !includeInstagram && !includeInstagramPhoto) {
+          throw redditResult.reason;
+        }
+      } else if (redditResult.value) {
+        const text = redditResult.value.text.trim();
+        if (text) summaries.reddit = text;
       }
     }
 
@@ -371,10 +520,23 @@ export async function regenerateSummary(
   apiKey: string,
 ): Promise<RegenerateResponse> {
   try {
+    const model = createModel(provider, apiKey);
+
+    if (platform === 'reddit') {
+      const extra = REDDIT_REGENERATE_INSTRUCTIONS[mode];
+      if (!extra) return { error: '알 수 없는 요청입니다.' };
+      const result = await generateText({
+        model,
+        prompt: REDDIT_PROMPT(source.title, source.content, url, extra),
+      });
+      const text = result.text.trim();
+      if (!text) return { error: 'AI가 빈 응답을 반환했습니다. 다시 시도해주세요.' };
+      return { text };
+    }
+
     const modifier = REGENERATE_INSTRUCTIONS[mode];
     if (!modifier) return { error: '알 수 없는 요청입니다.' };
 
-    const model = createModel(provider, apiKey);
     const limit = PLATFORM_LIMITS[platform];
 
     const prompt = `
