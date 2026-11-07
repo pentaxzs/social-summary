@@ -1,4 +1,5 @@
 import * as cheerio from 'cheerio';
+import { youtubeVideoId, fetchYoutube } from '@/lib/youtube';
 
 export interface ExtractResult {
   title: string;
@@ -33,6 +34,13 @@ function validateUrl(url: string): void {
 
 export async function extractContent(url: string): Promise<ExtractResult> {
   validateUrl(url);
+
+  // 유튜브는 긁어서 될 페이지가 아니다. 전용 경로로 보낸다
+  const videoId = youtubeVideoId(url);
+  if (videoId) {
+    const doc = await fetchYoutube(videoId);
+    return { ...doc, images: [] };
+  }
 
   const response = await fetch(url, {
     headers: {
