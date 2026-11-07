@@ -157,6 +157,11 @@ End with one specific, genuine question when a question fits — one that invite
 experience, an alternative approach, or informed disagreement. Never "What do you think?"
 and never ask for upvotes.
 
+Then, below that, close the post body itself with the source link, and — only when the source
+is not written in English — one short line saying the original is in that language and that
+browser translation reads it fine. Write that line in your own words, plainly, no apology.
+It belongs to the post, not to the notes below it.
+
 BEFORE ANSWERING, CHECK
 Faithful to the source. Relevant to that community. Factually accurate. Natural English. Clear
 structure. Low promotional intensity. Useful. Right length. Worth replying to.
@@ -168,8 +173,10 @@ ${extra}` : ''}
 
 OUTPUT
 Reply with exactly these sections, in this order, with these headers, and nothing else.
-Write every section in English. Do not add a section for anything you cannot actually
-determine from here.
+Write every section in English except the Korean divider line, which you copy exactly as
+given. Do not add a section for anything you cannot actually determine from here.
+TITLES, POST and LINKS are what gets posted. The two sections after the divider are for the
+author to read before posting and never go into the post.
 
 TITLES
 1. <experience-driven>
@@ -177,20 +184,24 @@ TITLES
 3. <insight-driven>
 
 POST
-<the complete post body, ready to paste>
+<the complete post body, ready to paste, ending with the source link
+ and the translation line when the source is not in English>
 
 LINKS
 - <the source URL> — the article this post came from
 - <any further link the source itself points to> — what it is
 
+--- 여기부터는 올리기 전 확인용입니다. 글에는 넣지 마세요 ---
+
 WHAT CHANGED
-What you emphasised, condensed or left out, and why. Two or three lines.
+What you emphasised, condensed or left out, and why — so the author can judge whether the
+post is still faithful to the source. Two or three lines.
 
 NOTICE
-Only things you actually know: a claim the source does not support, something you had to
-guess at, a disclosure the author owes, a kind of post that is widely restricted. Write
-"None" if there is nothing. Do not pad this with generic advice to go and read the
-subreddit rules.
+What the author should check or fix before posting. Only things you actually know: a claim
+the source does not support, something you had to guess at, a disclosure they owe, a kind of
+post that is widely restricted. Write "None" if there is nothing. Do not pad this with
+generic advice to go and read the subreddit rules.
 `.trim();
 
 /** Reddit 은 영문이라 다시 만들기 지시도 영문이어야 한다 */
