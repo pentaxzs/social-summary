@@ -20,6 +20,7 @@ import {
   ALL_PLATFORMS,
   PLATFORM_META,
   PROVIDERS,
+  TEXT_PLATFORMS,
 } from '@/lib/types';
 
 const LS_PROVIDER = 'ss_provider';
@@ -28,7 +29,6 @@ const LS_HISTORY = 'ss_history';
 const LS_UNSPLASH_KEY = 'ss_unsplash_key';
 const LS_OPENAI_IMAGE_KEY = 'ss_openai_image_key';
 
-const TEXT_PLATFORMS: TextPlatform[] = ['twitter', 'thread', 'linkedin', 'geekNews'];
 
 /** 요청은 끝났는데 결과가 없는 플랫폼. 조용히 사라지지 않고 왜 비었는지 알린다 */
 function FailedCard({ platform }: { platform: Platform }) {

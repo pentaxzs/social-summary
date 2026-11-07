@@ -155,6 +155,15 @@ export interface SummarizeError {
 
 export const ALL_PLATFORMS: Platform[] = ['twitter', 'thread', 'linkedin', 'geekNews', 'instagram', 'instagramPhoto', 'reddit'];
 
+/**
+ * 텍스트 카드로 그려지는 플랫폼. ALL_PLATFORMS 에서 끌어낸다.
+ * 손으로 적은 목록을 따로 들고 있었더니 Reddit 을 더하면서 한쪽을
+ * 빠뜨렸고, 결과가 만들어지고도 화면에 카드가 안 나왔다.
+ */
+export const TEXT_PLATFORMS: TextPlatform[] = ALL_PLATFORMS.filter(
+  (p): p is TextPlatform => p !== 'instagram' && p !== 'instagramPhoto',
+);
+
 export const PLATFORM_LABELS_ALL: Record<Platform, string> = {
   twitter: '𝕏 Twitter',
   thread: '🧵 Thread',
