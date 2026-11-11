@@ -9,6 +9,7 @@ import { InstagramPhotoCard } from '@/components/InstagramPhotoCard';
 import { summarizeUrl, regenerateSummary, regenerateInstagramPost } from '@/app/actions/summarize';
 import { regenerateSlideImage, checkImageModels } from '@/app/actions/image-sources';
 import { KeyField } from '@/components/KeyField';
+import { CardCountPicker } from '@/components/CardCountPicker';
 import {
   Provider,
   Platform,
@@ -22,6 +23,7 @@ import {
   PLATFORM_META,
   PROVIDERS,
   TEXT_PLATFORMS,
+  DEFAULT_CARD_COUNT,
 } from '@/lib/types';
 
 const LS_PROVIDER = 'ss_provider';
@@ -64,6 +66,7 @@ export default function Home() {
   const [imageModelMsg, setImageModelMsg] = useState<string | null>(null);
   const [youtubeKey, setYoutubeKey] = useState('');
   const urlRef = useRef<HTMLInputElement>(null);
+  const [cardCount, setCardCount] = useState(DEFAULT_CARD_COUNT);
   const [deckBusy, setDeckBusy] = useState<'instagram' | 'instagramPhoto' | null>(null);
   const [deckError, setDeckError] = useState<Partial<Record<'instagram' | 'instagramPhoto', string>>>({});
   const [submittedPlatforms, setSubmittedPlatforms] = useState<Set<Platform>>(new Set());
@@ -299,6 +302,7 @@ export default function Home() {
           unsplashKey || undefined,
           provider === 'openai' ? apiKey : openaiImageKey || undefined,
           youtubeKey || undefined,
+          cardCount,
         );
 
         if ('error' in result && result.error) {
@@ -499,6 +503,21 @@ export default function Home() {
                 </span>
               )}
             </div>
+          </div>
+        )}
+
+        {/* 만들기 전에 정한다. 원문 길이를 보고 몇 장이 맞을지 판단하는 편이 낫다 */}
+        {(selectedPlatforms.has('instagram') || selectedPlatforms.has('instagramPhoto')) && (
+          <div className="mt-4">
+            <CardCountPicker
+              label="카드 장수"
+              value={cardCount}
+              onChange={setCardCount}
+              color={PLATFORM_META.instagram.color}
+            />
+            <p className="mt-1.5 text-[11px] text-[var(--soft)]">
+              표지와 마무리 장을 포함한 수입니다. 만든 뒤에도 카드에서 다시 고를 수 있습니다
+            </p>
           </div>
         )}
 

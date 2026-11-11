@@ -7,17 +7,19 @@ import { CARD_COUNTS } from '@/lib/types';
  * 숫자가 여섯 개뿐이라 드롭다운보다 한 번에 보이는 편이 낫다.
  */
 export function CardCountPicker({
-  value, onChange, onRegenerate, busy, color,
+  value, onChange, onRegenerate, busy = false, color, label = '장수',
 }: {
   value: number;
   onChange: (n: number) => void;
-  onRegenerate: () => void;
-  busy: boolean;
+  /** 없으면 고르기만 하는 줄이 된다 — 만들기 전 화면이 그렇다 */
+  onRegenerate?: () => void;
+  busy?: boolean;
   color: string;
+  label?: string;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-      <span className="np-label">장수</span>
+      <span className="np-label">{label}</span>
       <div className="flex border border-[var(--hair)]" role="group" aria-label="카드 장수">
         {CARD_COUNTS.map((n) => {
           const on = n === value;
@@ -37,14 +39,16 @@ export function CardCountPicker({
           );
         })}
       </div>
-      <button
-        type="button"
-        onClick={onRegenerate}
-        disabled={busy}
-        className="text-[11px] font-bold uppercase tracking-[0.12em] underline underline-offset-4 hover:no-underline disabled:opacity-35 disabled:cursor-not-allowed transition"
-      >
-        {busy ? '만드는 중…' : '다시 생성'}
-      </button>
+      {onRegenerate && (
+        <button
+          type="button"
+          onClick={onRegenerate}
+          disabled={busy}
+          className="text-[11px] font-bold uppercase tracking-[0.12em] underline underline-offset-4 hover:no-underline disabled:opacity-35 disabled:cursor-not-allowed transition"
+        >
+          {busy ? '만드는 중…' : '다시 생성'}
+        </button>
+      )}
     </div>
   );
 }

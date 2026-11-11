@@ -354,7 +354,12 @@ export async function summarizeUrl(
   unsplashKey?: string,
   openaiImageKey?: string,
   youtubeKey?: string,
+  cardCount?: number,
 ): Promise<SummarizeResponse> {
+  const deckSlides = ((CARD_COUNTS as readonly number[]).includes(cardCount ?? 0)
+    ? cardCount!
+    : DEFAULT_CARD_COUNT) - 1;
+
   try {
     const { title, content } = await extractContent(url, youtubeKey);
     const model = createModel(provider, apiKey);
@@ -372,10 +377,10 @@ export async function summarizeUrl(
         ? generateText({ model, prompt: SUMMARY_PROMPT(title, content, textPlatforms) })
         : Promise.resolve(null),
       includeInstagram
-        ? generateText({ model, prompt: INSTAGRAM_PROMPT(title, content, DEFAULT_CARD_COUNT - 1) })
+        ? generateText({ model, prompt: INSTAGRAM_PROMPT(title, content, deckSlides) })
         : Promise.resolve(null),
       includeInstagramPhoto
-        ? generateText({ model, prompt: INSTAGRAM_PROMPT(title, content, DEFAULT_CARD_COUNT - 1) })
+        ? generateText({ model, prompt: INSTAGRAM_PROMPT(title, content, deckSlides) })
         : Promise.resolve(null),
       includeReddit
         ? generateText({ model, prompt: REDDIT_PROMPT(title, content, url) })
