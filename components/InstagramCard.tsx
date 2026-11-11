@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { InstagramPost, InstagramSlide } from '@/lib/types';
 import { CANVAS_HEAD, CANVAS_BODY, waitForCardFonts } from '@/lib/fonts';
+import { CardCountPicker } from '@/components/CardCountPicker';
 import { CARD_ACCENTS, DEFAULT_ACCENT, readStoredAccent, storeAccent } from '@/lib/card-theme';
 import { useHydrated } from '@/lib/use-hydrated';
 import { stripEmphasis } from '@/lib/handwriting';
@@ -157,8 +158,17 @@ function SlidePreview({ slide, index, total, accent }: {
 
 /* ─── 본체 ─── */
 
-export function InstagramCard({ post }: { post: InstagramPost }) {
-  const [current, setCurrent] = useState(0);
+export function InstagramCard({
+  post, onRegenerate, regenerating = false, regenerateError = null,
+}: {
+  post: InstagramPost;
+  onRegenerate: (cardCount: number) => void;
+  regenerating?: boolean;
+  regenerateError?: string | null;
+}) {
+  const [rawCurrent, setCurrent] = useState(0);
+  // 지금 보이는 장수를 기본으로 두되, 고르면 그쪽을 따른다
+  const [pickedCount, setPickedCount] = useState<number | null>(null);
   const [copiedCaption, setCopiedCaption] = useState(false);
   const [saving, setSaving] = useState(false);
   // 서버 렌더에는 localStorage 가 없다. 하이드레이션 이후에만 읽어
@@ -186,6 +196,8 @@ export function InstagramCard({ post }: { post: InstagramPost }) {
 
   const slides = [...post.slides, outroSlide];
   const total = slides.length;
+  // 장수를 줄여 다시 만들면 보고 있던 번호가 범위를 넘는다. 늘 안쪽으로 당긴다
+  const current = Math.min(rawCurrent, total - 1);
   const slide = slides[current];
 
   /** 웹폰트가 준비되기 전에 그리면 PNG 만 시스템 폰트로 나온다 */
@@ -239,6 +251,19 @@ export function InstagramCard({ post }: { post: InstagramPost }) {
       <div className="pl-3.5 border-l-[3px] min-w-0" style={{ borderColor: '#6e1b33' }}>
         <div className="max-w-[420px]">
           <SlidePreview slide={slide} index={current} total={total} accent={activeAccent} />
+        </div>
+
+        <div className="mt-3">
+          <CardCountPicker
+            value={pickedCount ?? total}
+            onChange={setPickedCount}
+            onRegenerate={() => onRegenerate(pickedCount ?? total)}
+            busy={regenerating}
+            color="#6e1b33"
+          />
+          {regenerateError && (
+            <p className="mt-2 text-xs text-[#8a2a12] break-words">⚠ {regenerateError}</p>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-3 mt-3">

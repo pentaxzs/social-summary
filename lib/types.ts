@@ -176,6 +176,13 @@ export const PLATFORM_LABELS_ALL: Record<Platform, string> = {
 
 export type SummarizeResponse = SummarizeResult | SummarizeError;
 
+/**
+ * 카드 묶음의 총 장수. 화면에 보이는 수이고, 마지막 마무리 장을 포함한다.
+ * 처음에는 기본값으로 만들고, 그 뒤에는 골라서 다시 만든다.
+ */
+export const CARD_COUNTS = [5, 6, 7, 8, 9, 10] as const;
+export const DEFAULT_CARD_COUNT = 8;
+
 export const PLATFORM_LIMITS: Record<keyof PlatformSummaries, number> = {
   twitter: 250,
   thread: 500,

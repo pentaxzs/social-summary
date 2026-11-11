@@ -6,7 +6,7 @@ import { SummaryCard } from '@/components/SummaryCard';
 import { SummarySkeleton } from '@/components/SummarySkeleton';
 import { InstagramCard } from '@/components/InstagramCard';
 import { InstagramPhotoCard } from '@/components/InstagramPhotoCard';
-import { summarizeUrl, regenerateSummary } from '@/app/actions/summarize';
+import { summarizeUrl, regenerateSummary, regenerateInstagramPost } from '@/app/actions/summarize';
 import { regenerateSlideImage, checkImageModels } from '@/app/actions/image-sources';
 import { KeyField } from '@/components/KeyField';
 import {
@@ -64,6 +64,8 @@ export default function Home() {
   const [imageModelMsg, setImageModelMsg] = useState<string | null>(null);
   const [youtubeKey, setYoutubeKey] = useState('');
   const urlRef = useRef<HTMLInputElement>(null);
+  const [deckBusy, setDeckBusy] = useState<'instagram' | 'instagramPhoto' | null>(null);
+  const [deckError, setDeckError] = useState<Partial<Record<'instagram' | 'instagramPhoto', string>>>({});
   const [submittedPlatforms, setSubmittedPlatforms] = useState<Set<Platform>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<string[]>([]);
@@ -208,6 +210,33 @@ export default function Home() {
       setImageError('이미지 생성 중 오류가 발생했습니다');
     } finally {
       setIsRegeneratingImage(false);
+    }
+  }
+
+  /** 카드 묶음을 고른 장수로 다시 만든다 */
+  async function handleDeckRegenerate(
+    kind: 'instagram' | 'instagramPhoto',
+    cardCount: number,
+  ) {
+    if (!source || !apiKey || deckBusy) return;
+    setDeckBusy(kind);
+    setDeckError((prev) => ({ ...prev, [kind]: undefined }));
+    try {
+      const result = await regenerateInstagramPost(
+        kind, source, cardCount, provider, apiKey,
+        unsplashKey || undefined,
+        provider === 'openai' ? apiKey : openaiImageKey || undefined,
+      );
+      if (result.error) {
+        setDeckError((prev) => ({ ...prev, [kind]: result.error }));
+        return;
+      }
+      if (kind === 'instagram' && result.post) setInstagramPost(result.post);
+      if (kind === 'instagramPhoto' && result.photoPost) setInstagramPhotoPost(result.photoPost);
+    } catch {
+      setDeckError((prev) => ({ ...prev, [kind]: '다시 만드는 중 오류가 발생했습니다' }));
+    } finally {
+      setDeckBusy(null);
     }
   }
 
@@ -531,7 +560,12 @@ export default function Home() {
 
             {submittedPlatforms.has('instagram') &&
               (instagramPost ? (
-                <InstagramCard post={instagramPost} />
+                <InstagramCard
+                  post={instagramPost}
+                  onRegenerate={(n) => handleDeckRegenerate('instagram', n)}
+                  regenerating={deckBusy === 'instagram'}
+                  regenerateError={deckError.instagram ?? null}
+                />
               ) : isPending ? (
                 <SummarySkeleton platform="instagram" />
               ) : (
@@ -546,6 +580,9 @@ export default function Home() {
                   onRegenerateImage={handleRegenerateImage}
                   isRegenerating={isRegeneratingImage}
                   imageError={imageError}
+                  onRegenerate={(n) => handleDeckRegenerate('instagramPhoto', n)}
+                  regenerating={deckBusy === 'instagramPhoto'}
+                  regenerateError={deckError.instagramPhoto ?? null}
                 />
               ) : isPending ? (
                 <SummarySkeleton platform="instagramPhoto" />

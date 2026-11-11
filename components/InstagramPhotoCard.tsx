@@ -7,6 +7,7 @@ import { CARD_ACCENTS, DEFAULT_ACCENT, readStoredAccent, storeAccent } from '@/l
 import { useHydrated } from '@/lib/use-hydrated';
 import { stripEmphasis } from '@/lib/handwriting';
 import { optimiseUploadedImage } from '@/lib/image-upload';
+import { CardCountPicker } from '@/components/CardCountPicker';
 import {
   S, PAPER, PROFILE, recapItems, photoHeightFor,
   drawPhotoTop, drawPageBadge, drawPhotoText, drawFollowSlide,
@@ -18,6 +19,9 @@ interface InstagramPhotoCardProps {
   onRegenerateImage: (slideIndex: number, source: 'unsplash' | 'gpt') => void;
   isRegenerating: boolean;
   imageError: string | null;
+  onRegenerate: (cardCount: number) => void;
+  regenerating?: boolean;
+  regenerateError?: string | null;
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {
@@ -124,12 +128,15 @@ function PhotoSlidePreview({
 
 export function InstagramPhotoCard({
   post, onImageChange, onRegenerateImage, isRegenerating, imageError,
+  onRegenerate, regenerating = false, regenerateError = null,
 }: InstagramPhotoCardProps) {
-  const [current, setCurrent] = useState(0);
+  const [rawCurrent, setCurrent] = useState(0);
   const [copiedCaption, setCopiedCaption] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  // 지금 보이는 장수를 기본으로 두되, 고르면 그쪽을 따른다
+  const [pickedCount, setPickedCount] = useState<number | null>(null);
 
   const hydrated = useHydrated();
   const stored = useMemo(() => (hydrated ? readStoredAccent() : DEFAULT_ACCENT), [hydrated]);
@@ -147,6 +154,8 @@ export function InstagramPhotoCard({
 
   const slides: (InstagramPhotoSlide | null)[] = [...post.slides, null];
   const total = slides.length;
+  // 장수를 줄여 다시 만들면 보고 있던 번호가 범위를 넘는다. 늘 안쪽으로 당긴다
+  const current = Math.min(rawCurrent, total - 1);
   const slide = slides[current];
   const canSwapPhoto = slide !== null;
 
@@ -221,6 +230,19 @@ export function InstagramPhotoCard({
         <div className="max-w-[420px]">
           <PhotoSlidePreview slide={slide} index={current} total={total}
             accent={accent} nextStory={nextStory} recap={recap} />
+        </div>
+
+        <div className="mt-3">
+          <CardCountPicker
+            value={pickedCount ?? total}
+            onChange={setPickedCount}
+            onRegenerate={() => onRegenerate(pickedCount ?? total)}
+            busy={regenerating}
+            color="#6e1b33"
+          />
+          {regenerateError && (
+            <p className="mt-2 text-xs text-[#8a2a12] break-words">⚠ {regenerateError}</p>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-3 mt-3">

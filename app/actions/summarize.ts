@@ -19,6 +19,9 @@ import {
   RegenerateMode,
   TONES,
   PLATFORM_LIMITS,
+  CARD_COUNTS,
+  DEFAULT_CARD_COUNT,
+  SourceDoc,
 } from '@/lib/types';
 
 function truncateAtSentence(text: string, limit: number): string {
@@ -213,7 +216,7 @@ const REDDIT_REGENERATE_INSTRUCTIONS: Record<RegenerateMode, string> = {
   ...Object.fromEntries(TONES.map((t) => [t.key, t.english])),
 } as Record<RegenerateMode, string>;
 
-const INSTAGRAM_PROMPT = (title: string, content: string) => `
+const INSTAGRAM_PROMPT = (title: string, content: string, slideCount: number) => `
 당신은 인스타그램 카드뉴스 전문 콘텐츠 기획자입니다.
 아래 기사를 인스타그램 캐러셀 카드뉴스로 변환하세요. 모든 출력은 한국어로 작성합니다.
 
@@ -222,11 +225,11 @@ const INSTAGRAM_PROMPT = (title: string, content: string) => `
 기사 본문:
 ${content}
 
-[슬라이드 수 - 반드시 5~7장]
-- 핵심 아이디어 2~3개 → 5장
-- 핵심 아이디어 4개 → 6장
-- 핵심 아이디어 5개 이상 → 7장
-(1번=cover 훅, 마지막=content 정리/CTA, 중간=content+stat 혼합)
+[슬라이드 수 - 반드시 ${slideCount}장. 더도 덜도 안 된다]
+1번=cover 훅, 마지막=content 정리/CTA, 중간=content+stat 혼합.
+핵심 아이디어를 ${slideCount}장에 맞춰 나눠라. 모자라면 쪼개지 말고 한 장에
+담을 만큼 깊게 쓰고, 남으면 덜 중요한 것부터 버려라. 장수를 채우려고
+같은 말을 다시 하거나 원문에 없는 내용을 만들지 마라.
 
 [레이아웃 타입]
 - "cover": 1번 전용. 대형 제목 중심
@@ -369,10 +372,10 @@ export async function summarizeUrl(
         ? generateText({ model, prompt: SUMMARY_PROMPT(title, content, textPlatforms) })
         : Promise.resolve(null),
       includeInstagram
-        ? generateText({ model, prompt: INSTAGRAM_PROMPT(title, content) })
+        ? generateText({ model, prompt: INSTAGRAM_PROMPT(title, content, DEFAULT_CARD_COUNT - 1) })
         : Promise.resolve(null),
       includeInstagramPhoto
-        ? generateText({ model, prompt: INSTAGRAM_PROMPT(title, content) })
+        ? generateText({ model, prompt: INSTAGRAM_PROMPT(title, content, DEFAULT_CARD_COUNT - 1) })
         : Promise.resolve(null),
       includeReddit
         ? generateText({ model, prompt: REDDIT_PROMPT(title, content, url) })
@@ -472,6 +475,8 @@ export async function summarizeUrl(
                 title: parsed.title,
                 slides: photoSlides,
                 caption: parsed.caption,
+                // 마지막 장의 다음 편 예고. 여기서 빠뜨리면 카드에 영영 안 들어간다
+                next_story: parsed.next_story,
               };
             }
           }
@@ -573,6 +578,73 @@ ${source.content}
     if (text.length > limit) text = truncateAtSentence(text, limit);
 
     return { text: withSourceLink(platform, text, url) };
+  } catch (err: unknown) {
+    const raw = err instanceof Error ? err.message : '';
+    if (/401|authentication|invalid.*key|api.?key|unauthorized/i.test(raw)) {
+      return { error: 'API 키가 올바르지 않습니다. 키를 확인하고 다시 시도해주세요.' };
+    }
+    return { error: raw || '다시 만드는 중 오류가 발생했습니다.' };
+  }
+}
+
+/* ─── 카드 묶음 다시 만들기 ─── */
+
+export interface InstagramRegenerateResponse {
+  post?: InstagramPost;
+  photoPost?: InstagramPhotoPost;
+  error?: string;
+}
+
+/**
+ * 카드 묶음을 장수를 정해 다시 만든다. 원문은 첫 생성 때 받아둔 걸 재사용한다.
+ *
+ * cardCount 는 화면에 보이는 총 장수다. 마지막 마무리 장은 코드가 붙이므로
+ * AI 에게는 하나 적게 시킨다.
+ */
+export async function regenerateInstagramPost(
+  kind: 'instagram' | 'instagramPhoto',
+  source: SourceDoc,
+  cardCount: number,
+  provider: Provider,
+  apiKey: string,
+  unsplashKey?: string,
+  openaiImageKey?: string,
+): Promise<InstagramRegenerateResponse> {
+  const total = (CARD_COUNTS as readonly number[]).includes(cardCount)
+    ? cardCount
+    : DEFAULT_CARD_COUNT;
+
+  try {
+    const model = createModel(provider, apiKey);
+    const result = await generateText({
+      model,
+      prompt: INSTAGRAM_PROMPT(source.title, source.content, total - 1),
+    });
+
+    const match = result.text.match(/\{[\s\S]*\}/);
+    if (!match) return { error: 'AI 응답을 읽지 못했습니다. 다시 시도해주세요.' };
+
+    const parsed = JSON.parse(match[0]) as InstagramPost;
+    if (!Array.isArray(parsed.slides) || parsed.slides.length === 0) {
+      return { error: 'AI가 카드를 만들지 못했습니다. 다시 시도해주세요.' };
+    }
+
+    // 요청한 장수를 넘기면 잘라낸다. 모자란 건 손댈 수 없다
+    const slides = parsed.slides.slice(0, total - 1);
+
+    if (kind === 'instagram') {
+      return { post: { ...parsed, slides } };
+    }
+
+    const imageUrls = await assignImagesToSlides(slides, unsplashKey, openaiImageKey);
+    return {
+      photoPost: {
+        title: parsed.title,
+        caption: parsed.caption,
+        next_story: parsed.next_story,
+        slides: slides.map((slide, i) => ({ ...slide, image_url: imageUrls[i] || '' })),
+      },
+    };
   } catch (err: unknown) {
     const raw = err instanceof Error ? err.message : '';
     if (/401|authentication|invalid.*key|api.?key|unauthorized/i.test(raw)) {
